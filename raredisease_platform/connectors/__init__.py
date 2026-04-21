@@ -24,6 +24,7 @@ from .orphadata import OrphadataConnector
 from .pubchem import PubChemConnector
 from .pubmed import PubMedConnector
 from .trials import ClinicalTrialsConnector
+from .ncbi_gene import NCBIGeneConnector
 
 
 #: Registry of available connectors keyed by human-readable name.
@@ -36,6 +37,7 @@ CONNECTOR_REGISTRY: Dict[str, BaseConnector] = {
     "clinvar": ClinVarConnector(),
     "pubchem": PubChemConnector(),
     "clinicaltrials": ClinicalTrialsConnector(),
+    "ncbi_gene": NCBIGeneConnector(),
 }
 
 

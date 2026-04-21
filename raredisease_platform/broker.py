@@ -202,17 +202,185 @@ class Broker:
         requested_evidence_types: Optional[List[str]] = None,
         filters: Optional[Dict[str, Any]] = None,
     ) -> StructuredEvidenceResult:
+        filters = filters or {}
+
+        def entity_key(entity: NormalizedEntity) -> str:
+            for key in (
+                "orpha",
+                "mondo",
+                "medgen",
+                "medgen_uid",
+                "hpo",
+                "hgnc",
+                "entrez",
+                "clinvar",
+                "pubchem",
+                "nct",
+            ):
+                value = (entity.source_ids or {}).get(key)
+                if value:
+                    return f"{entity.entity_type}:{key}:{value}"
+            return f"{entity.entity_type}:label:{entity.preferred_label.lower()}"
+
+        def dedupe_entities(entities: List[NormalizedEntity]) -> List[NormalizedEntity]:
+            out: Dict[str, NormalizedEntity] = {}
+            for entity in entities:
+                out[entity_key(entity)] = entity
+            return list(out.values())
+
+        def merge_entities(base: NormalizedEntity, enriched: NormalizedEntity) -> NormalizedEntity:
+            merged_source_ids = dict(base.source_ids or {})
+            merged_source_ids.update(enriched.source_ids or {})
+
+            merged_synonyms = []
+            seen = set()
+            for value in list(base.synonyms or []) + list(enriched.synonyms or []):
+                key = value.strip().lower()
+                if key and key not in seen:
+                    seen.add(key)
+                    merged_synonyms.append(value)
+
+            merged_provenance = dict(base.provenance or {})
+            enriched_provenance = dict(enriched.provenance or {})
+            merged_provenance.update(enriched_provenance)
+
+            return NormalizedEntity(
+                entity_type=base.entity_type,
+                preferred_label=enriched.preferred_label or base.preferred_label,
+                source_ids=merged_source_ids,
+                synonyms=merged_synonyms,
+                description=enriched.description or base.description,
+                confidence=max(base.confidence, enriched.confidence),
+                provenance=merged_provenance,
+            )
+
+        requested = {x.lower() for x in (requested_evidence_types or [])}
+
         by_type: Dict[EntityType, List[NormalizedEntity]] = {}
         for entity in normalized_bundle.entities:
             by_type.setdefault(entity.entity_type, []).append(entity)
 
+        diseases = list(by_type.get(EntityType.disease, []) or [])
+        genes = list(by_type.get(EntityType.gene, []) or [])
+        variants = list(by_type.get(EntityType.variant, []) or [])
+        phenotypes = list(by_type.get(EntityType.phenotype, []) or [])
+        compounds = list(by_type.get(EntityType.compound, []) or [])
+        trials = list(by_type.get(EntityType.trial, []) or [])
+        relationships: List[Dict[str, Any]] = []
+
+        # ------------------------------------------------------------------
+        # Phenotype-first retrieval: HPO -> MedGen disease candidates
+        # ------------------------------------------------------------------
+        if phenotypes and (not requested or "diseases" in requested or "relationships" in requested):
+            hpo = get_connector("hpo")
+            raw_disease_candidates = await hpo.propose_disease_candidates(
+                phenotypes,
+                max_candidates=int(filters.get("max_disease_candidates", 10)),
+            )
+
+            orphadata = get_connector("orphadata")
+            enriched_disease_candidates: List[NormalizedEntity] = []
+
+            for raw in raw_disease_candidates:
+                candidate = NormalizedEntity.model_validate(raw)
+
+                # If MedGen exposed an ORPHA code, enrich it with the disease normalizer.
+                orpha_code = (candidate.source_ids or {}).get("orpha")
+                if orpha_code:
+                    try:
+                        enriched_raw = await orphadata.fetch_by_id(f"ORPHA:{orpha_code}")
+                        if enriched_raw:
+                            enriched = NormalizedEntity.model_validate(enriched_raw)
+                            candidate = merge_entities(candidate, enriched)
+                    except Exception:
+                        pass
+
+                enriched_disease_candidates.append(candidate)
+
+                matched_phenotypes = (candidate.provenance or {}).get("matched_phenotypes", [])
+                for phenotype in phenotypes:
+                    if phenotype.preferred_label in matched_phenotypes:
+                        relationships.append(
+                            {
+                                "relationship_type": "phenotype_suggests_disease",
+                                "source": "medgen",
+                                "confidence": candidate.confidence,
+                                "directionality": "phenotype_to_disease",
+                                "subject": phenotype.model_dump(),
+                                "object": candidate.model_dump(),
+                                "provenance": {
+                                    "matched_phenotypes": matched_phenotypes,
+                                },
+                            }
+                        )
+
+            diseases = dedupe_entities(diseases + enriched_disease_candidates)
+
+        # ------------------------------------------------------------------
+        # Gene enrichment: HGNC-normalized genes -> NCBI Gene metadata + disease links
+        # ------------------------------------------------------------------
+        if genes and (not requested or "genes" in requested or "diseases" in requested or "relationships" in requested):
+            ncbi_gene = get_connector("ncbi_gene")
+            enriched_genes: List[NormalizedEntity] = []
+            linked_diseases: List[NormalizedEntity] = []
+
+            for gene in genes:
+                entrez = (gene.source_ids or {}).get("entrez")
+                query_payload: Dict[str, Any]
+                if entrez:
+                    query_payload = {"gene_ids": [entrez], "filters": {"retmax": 1}}
+                else:
+                    query_payload = {
+                        "gene_terms": [gene.preferred_label] + list((gene.synonyms or [])[:2]),
+                        "filters": {"retmax": 1},
+                    }
+
+                try:
+                    raw_records = await ncbi_gene.search(query_payload)
+                except Exception:
+                    raw_records = []
+
+                if not raw_records:
+                    enriched_genes.append(gene)
+                    continue
+
+                enriched = NormalizedEntity.model_validate(raw_records[0])
+                merged_gene = merge_entities(gene, enriched)
+                enriched_genes.append(merged_gene)
+
+                disease_links = (merged_gene.provenance or {}).get("disease_links", []) or []
+                for raw_disease in disease_links:
+                    try:
+                        disease_entity = NormalizedEntity.model_validate(raw_disease)
+                    except Exception:
+                        continue
+
+                    linked_diseases.append(disease_entity)
+                    relationships.append(
+                        {
+                            "relationship_type": "gene_associated_with_disease",
+                            "source": "medgen",
+                            "confidence": disease_entity.confidence,
+                            "directionality": "gene_to_disease",
+                            "subject": merged_gene.model_dump(),
+                            "object": disease_entity.model_dump(),
+                            "provenance": {
+                                "via": "ncbi_gene_connector",
+                            },
+                        }
+                    )
+
+            genes = dedupe_entities(enriched_genes)
+            diseases = dedupe_entities(diseases + linked_diseases)
+
         return StructuredEvidenceResult(
-            genes=by_type.get(EntityType.gene),
-            variants=by_type.get(EntityType.variant),
-            phenotypes=by_type.get(EntityType.phenotype),
-            compounds=by_type.get(EntityType.compound),
-            trials=by_type.get(EntityType.trial),
-            relationships=[],
+            diseases=diseases or None,
+            genes=genes or None,
+            variants=variants or None,
+            phenotypes=phenotypes or None,
+            compounds=compounds or None,
+            trials=trials or None,
+            relationships=relationships or None,
         )
 
     async def assemble_evidence_graph(

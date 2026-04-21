@@ -208,13 +208,13 @@ class LiteratureResult(BaseModel):
 class StructuredEvidenceResult(BaseModel):
     """Container for structured evidence from non-literature sources."""
 
+    diseases: Optional[List[NormalizedEntity]] = None
     genes: Optional[List[NormalizedEntity]] = None
     variants: Optional[List[NormalizedEntity]] = None
     phenotypes: Optional[List[NormalizedEntity]] = None
     compounds: Optional[List[NormalizedEntity]] = None
     trials: Optional[List[NormalizedEntity]] = None
     relationships: Optional[List[Dict[str, Any]]] = None
-
 
 class EvidenceGraph(BaseModel):
     """Aggregated evidence graph returned by `assemble_evidence_graph`."""
