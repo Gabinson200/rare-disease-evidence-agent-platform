@@ -110,11 +110,14 @@ class Broker:
         compound_ids: Optional[List[str]] = None,
         keywords: Optional[str] = None,
         filters: Optional[PubMedSearchFilters | Dict[str, Any]] = None,
+        normalized_bundle: Optional[NormalizationResponse] = None,
     ) -> List[LiteratureResult]:
         if isinstance(filters, PubMedSearchFilters):
             filter_payload = filters.model_dump(exclude_none=True)
         else:
             filter_payload = filters or {}
+
+        derived_terms = self._extract_literature_terms_from_bundle(normalized_bundle)
 
         query: Dict[str, Any] = {
             "disease_ids": disease_ids,
@@ -123,10 +126,75 @@ class Broker:
             "compound_ids": compound_ids,
             "keywords": keywords,
             "filters": filter_payload,
+            # Europe PMC-friendly derived terms from normalized entities
+            "disease_terms": derived_terms["disease_terms"],
+            "gene_terms": derived_terms["gene_terms"],
+            "phenotype_terms": derived_terms["phenotype_terms"],
+            "compound_terms": derived_terms["compound_terms"],
+            "article_ids": derived_terms["article_ids"],
         }
 
         pubmed = get_connector("pubmed")
-        return await pubmed.search(query)
+        europepmc = get_connector("europepmc")
+
+        pubmed_results, europepmc_results = await asyncio.gather(
+            pubmed.search(query),
+            europepmc.search(query),
+            return_exceptions=True,
+        )
+
+        if isinstance(pubmed_results, Exception):
+            pubmed_results = []
+        if isinstance(europepmc_results, Exception):
+            europepmc_results = []
+
+        combined: List[LiteratureResult] = [
+            *pubmed_results,
+            *europepmc_results,
+        ]
+
+        def dedupe_key(article: LiteratureResult) -> str:
+            if article.pmid:
+                return f"pmid:{article.pmid}"
+            if article.pmcid:
+                return f"pmcid:{article.pmcid}"
+            if article.doi:
+                return f"doi:{article.doi.lower()}"
+            return f"title:{article.title.strip().lower()}"
+
+        def choose_better(a: LiteratureResult, b: LiteratureResult) -> LiteratureResult:
+            a_source = a.provenance.source.lower()
+            b_source = b.provenance.source.lower()
+
+            if a_source == "pubmed" and b_source != "pubmed":
+                return a
+            if b_source == "pubmed" and a_source != "pubmed":
+                return b
+
+            if bool(a.abstract) != bool(b.abstract):
+                return a if a.abstract else b
+
+            a_authors = len(a.authors or [])
+            b_authors = len(b.authors or [])
+            if a_authors != b_authors:
+                return a if a_authors > b_authors else b
+
+            if a.score != b.score:
+                return a if a.score > b.score else b
+
+            return a if a_source == "pubmed" else b
+
+        deduped: Dict[str, LiteratureResult] = {}
+        for article in combined:
+            key = dedupe_key(article)
+            if key not in deduped:
+                deduped[key] = article
+            else:
+                deduped[key] = choose_better(deduped[key], article)
+
+        merged_results = list(deduped.values())
+        merged_results.sort(key=lambda x: x.score, reverse=True)
+        return merged_results
 
     async def search_structured_evidence(
         self,
@@ -221,3 +289,65 @@ class Broker:
             citation_references=[f"PMID:{art.pmid}" for art in literature if art.pmid],
             evidence_graph=graph,
         )
+
+    def _extract_literature_terms_from_bundle(
+        self,
+        normalized_bundle: Optional[NormalizationResponse],
+    ) -> Dict[str, List[str]]:
+        if not normalized_bundle:
+            return {
+                "disease_terms": [],
+                "gene_terms": [],
+                "phenotype_terms": [],
+                "compound_terms": [],
+                "article_ids": [],
+            }
+
+        def unique_preserve_order(items: List[str]) -> List[str]:
+            seen = set()
+            out: List[str] = []
+            for item in items:
+                cleaned = item.strip()
+                if not cleaned:
+                    continue
+                key = cleaned.lower()
+                if key not in seen:
+                    seen.add(key)
+                    out.append(cleaned)
+            return out
+
+        def collect_terms(
+            entities: List[NormalizedEntity],
+            *,
+            synonym_limit: int = 3,
+        ) -> List[str]:
+            terms: List[str] = []
+            for entity in entities:
+                if entity.preferred_label:
+                    terms.append(entity.preferred_label)
+                for synonym in (entity.synonyms or [])[:synonym_limit]:
+                    if synonym:
+                        terms.append(synonym)
+            return unique_preserve_order(terms)
+
+        diseases = [e for e in normalized_bundle.entities if e.entity_type == EntityType.disease]
+        genes = [e for e in normalized_bundle.entities if e.entity_type == EntityType.gene]
+        phenotypes = [e for e in normalized_bundle.entities if e.entity_type == EntityType.phenotype]
+        compounds = [e for e in normalized_bundle.entities if e.entity_type == EntityType.compound]
+        articles = [e for e in normalized_bundle.entities if e.entity_type == EntityType.article]
+
+        article_ids: List[str] = []
+        for article in articles:
+            source_ids = article.source_ids or {}
+            for key in ("pmid", "pmcid", "doi"):
+                value = source_ids.get(key)
+                if value:
+                    article_ids.append(str(value))
+
+        return {
+            "disease_terms": collect_terms(diseases, synonym_limit=4),
+            "gene_terms": collect_terms(genes, synonym_limit=3),
+            "phenotype_terms": collect_terms(phenotypes, synonym_limit=3),
+            "compound_terms": collect_terms(compounds, synonym_limit=3),
+            "article_ids": unique_preserve_order(article_ids),
+        }

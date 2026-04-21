@@ -217,24 +217,24 @@ async def crosswalk_gene_identifier(
         namespace=request.namespace,
     )
 
-
 @app.post(
     "/search_literature",
     response_model=List[LiteratureResult],
     tags=["literature"],
     summary="Search biomedical literature",
     description=(
-        "Search PubMed using normalized identifiers and optional keyword and filter constraints.\n\n"
-        "Use this after normalization whenever possible so the search is anchored on stable IDs "
-        "instead of raw text alone."
+        "Search PubMed and Europe PMC using normalized identifiers, optional keyword constraints, "
+        "and optional normalized entity bundles.\n\n"
+        "If `normalized_bundle` is provided, the broker can derive disease, gene, phenotype, and "
+        "compound search terms from canonical entities and their synonyms before querying Europe PMC."
     ),
 )
 async def search_literature(
     request: LiteratureSearchRequest = Body(
         ...,
         openapi_examples={
-            "case_reports": {
-                "summary": "Disease + gene case report search",
+            "ids_and_keywords": {
+                "summary": "Search using IDs and keywords",
                 "value": {
                     "disease_ids": ["ORPHA:337"],
                     "gene_ids": ["HGNC:171"],
@@ -245,13 +245,47 @@ async def search_literature(
                     },
                 },
             },
-            "gene_only": {
-                "summary": "Gene-focused literature search",
+            "with_normalized_bundle": {
+                "summary": "Search using a normalized bundle",
                 "value": {
-                    "gene_ids": ["HGNC:1884"],
-                    "keywords": "cystic fibrosis",
+                    "keywords": "case report",
                     "filters": {
-                        "retmax": 10,
+                        "case_reports_only": True,
+                        "retmax": 5,
+                    },
+                    "normalized_bundle": {
+                        "entities": [
+                            {
+                                "entity_type": "disease",
+                                "preferred_label": "fibrodysplasia ossificans progressiva",
+                                "source_ids": {
+                                    "orpha": "337",
+                                    "mondo": "MONDO:0007525",
+                                },
+                                "synonyms": ["FOP"],
+                                "description": None,
+                                "confidence": 0.99,
+                                "provenance": {
+                                    "source": "orphadata",
+                                    "method": "stub_lookup",
+                                },
+                            },
+                            {
+                                "entity_type": "gene",
+                                "preferred_label": "ACVR1",
+                                "source_ids": {
+                                    "hgnc": "HGNC:171",
+                                    "entrez": "90",
+                                },
+                                "synonyms": [],
+                                "description": "activin A receptor type 1",
+                                "confidence": 0.99,
+                                "provenance": {
+                                    "source": "hgnc",
+                                    "method": "exact_symbol",
+                                },
+                            },
+                        ]
                     },
                 },
             },
@@ -265,6 +299,7 @@ async def search_literature(
         compound_ids=request.compound_ids,
         keywords=request.keywords,
         filters=request.filters,
+        normalized_bundle=request.normalized_bundle,
     )
 
 

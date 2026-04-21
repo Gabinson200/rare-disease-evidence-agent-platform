@@ -179,7 +179,7 @@ class LiteratureSearchRequest(BaseModel):
     compound_ids: Optional[List[str]] = None
     keywords: Optional[str] = None
     filters: Optional[PubMedSearchFilters] = None
-
+    normalized_bundle: Optional[NormalizationResponse] = None
 
 class LiteratureProvenance(BaseModel):
     source: str
