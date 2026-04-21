@@ -123,7 +123,7 @@ async def root():
 async def normalize_entities(
     request: NormalizeRequest = Body(
         ...,
-        examples={
+        openapi_examples={
             "mixed_disease_gene": {
                 "summary": "Mixed disease and gene query",
                 "value": {
@@ -163,7 +163,7 @@ async def normalize_entities(
 async def normalize_gene(
     request: GeneLookupRequest = Body(
         ...,
-        examples={
+        openapi_examples={
             "approved_symbol": {
                 "summary": "Approved symbol",
                 "value": {"raw_gene": "TP53"},
@@ -196,7 +196,7 @@ async def normalize_gene(
 async def crosswalk_gene_identifier(
     request: GeneCrosswalkRequest = Body(
         ...,
-        examples={
+        openapi_examples={
             "from_hgnc": {
                 "summary": "Crosswalk from HGNC ID",
                 "value": {"identifier": "HGNC:171", "namespace": "hgnc_id"},
@@ -232,7 +232,7 @@ async def crosswalk_gene_identifier(
 async def search_literature(
     request: LiteratureSearchRequest = Body(
         ...,
-        examples={
+        openapi_examples={
             "case_reports": {
                 "summary": "Disease + gene case report search",
                 "value": {
@@ -277,39 +277,17 @@ async def search_literature(
         "Take a normalized entity bundle and organize or expand non-literature evidence.\n\n"
         "In the current implementation this is still lightweight and mostly groups entities by type, "
         "but it is intended to become the broker entry point for structured evidence retrieval "
-        "from genes, variants, phenotypes, compounds, and trials."
+        "from genes, variants, phenotypes, compounds, and trials.\n\n"
+        "**Inputs**\n"
+        "- `normalized_bundle`: a `NormalizationResponse`\n"
+        "- `requested_evidence_types`: optional list such as `['genes', 'variants']`\n"
+        "- `filters`: optional free-form filter dictionary"
     ),
 )
 async def search_structured_evidence(
-    normalized_bundle: NormalizationResponse = Body(
-        ...,
-        examples={
-            "gene_bundle": {
-                "summary": "Normalized gene bundle",
-                "value": {
-                    "entities": [
-                        {
-                            "entity_type": "gene",
-                            "preferred_label": "ACVR1",
-                            "source_ids": {"hgnc": "HGNC:171", "entrez": "90"},
-                            "synonyms": [],
-                            "description": "activin A receptor type 1",
-                            "confidence": 0.99,
-                            "provenance": {"source": "hgnc", "method": "exact_symbol"},
-                        }
-                    ]
-                },
-            }
-        },
-    ),
-    requested_evidence_types: Optional[List[str]] = Body(
-        default=None,
-        examples=["genes", "variants", "trials"],
-    ),
-    filters: Optional[Dict[str, Any]] = Body(
-        default=None,
-        examples={"species": "human"},
-    ),
+    normalized_bundle: NormalizationResponse = Body(...),
+    requested_evidence_types: Optional[List[str]] = Body(default=None),
+    filters: Optional[Dict[str, Any]] = Body(default=None),
 ) -> StructuredEvidenceResult:
     return await broker.search_structured_evidence(
         normalized_bundle=normalized_bundle,
@@ -326,68 +304,19 @@ async def search_structured_evidence(
     description=(
         "Merge normalized entities, literature results, and structured evidence into a single evidence graph object.\n\n"
         "In the current implementation the graph is still a stub, but this endpoint defines the shape "
-        "that downstream ranking and summarization will use."
+        "that downstream ranking and summarization will use.\n\n"
+        "**Inputs**\n"
+        "- `normalized_bundle`: a `NormalizationResponse`\n"
+        "- `literature_results`: a list of `LiteratureResult` objects\n"
+        "- `structured_evidence_results`: a `StructuredEvidenceResult` object\n"
+        "- `scoring_profile`: optional scoring profile name"
     ),
 )
 async def assemble_evidence_graph(
-    normalized_bundle: NormalizationResponse = Body(
-        ...,
-        examples={
-            "simple_bundle": {
-                "summary": "Normalized bundle",
-                "value": {
-                    "entities": [
-                        {
-                            "entity_type": "gene",
-                            "preferred_label": "ACVR1",
-                            "source_ids": {"hgnc": "HGNC:171"},
-                            "synonyms": [],
-                            "description": "activin A receptor type 1",
-                            "confidence": 0.99,
-                            "provenance": {"source": "hgnc", "method": "exact_symbol"},
-                        }
-                    ]
-                },
-            }
-        },
-    ),
-    literature_results: List[LiteratureResult] = Body(
-        ...,
-        examples=[[{
-            "pmid": "12345678",
-            "title": "Example literature result",
-            "abstract": "Example abstract",
-            "year": 2024,
-            "journal": "Example Journal",
-            "authors": ["Doe J"],
-            "match_features": {"exact_gene_id": True},
-            "score": 0.91,
-            "provenance": {"source": "pubmed"}
-        }]],
-    ),
-    structured_evidence_results: StructuredEvidenceResult = Body(
-        ...,
-        examples={
-            "simple_structured": {
-                "summary": "Structured evidence result",
-                "value": {
-                    "genes": [
-                        {
-                            "entity_type": "gene",
-                            "preferred_label": "ACVR1",
-                            "source_ids": {"hgnc": "HGNC:171"},
-                            "synonyms": [],
-                            "description": "activin A receptor type 1",
-                            "confidence": 0.99,
-                            "provenance": {"source": "hgnc", "method": "exact_symbol"},
-                        }
-                    ],
-                    "relationships": []
-                },
-            }
-        },
-    ),
-    scoring_profile: Optional[str] = Body(default=None, examples=["default"]),
+    normalized_bundle: NormalizationResponse = Body(...),
+    literature_results: List[LiteratureResult] = Body(...),
+    structured_evidence_results: StructuredEvidenceResult = Body(...),
+    scoring_profile: Optional[str] = Body(default=None),
 ) -> EvidenceGraph:
     return await broker.assemble_evidence_graph(
         normalized_bundle=normalized_bundle,
@@ -405,30 +334,19 @@ async def assemble_evidence_graph(
     description=(
         "Create a dossier object around a primary normalized entity.\n\n"
         "This endpoint is intended for downstream summarization and reporting. "
-        "The broker currently assembles a lightweight dossier using the current search and graph stubs."
+        "The broker currently assembles a lightweight dossier using the current search and graph stubs.\n\n"
+        "**Inputs**\n"
+        "- `primary_entity`: a normalized entity object\n"
+        "- `scope`: optional scope string\n"
+        "- `filters`: optional filter dictionary\n"
+        "- `output_profile`: optional output profile string"
     ),
 )
 async def generate_dossier(
-    primary_entity: NormalizedEntity = Body(
-        ...,
-        examples={
-            "gene_entity": {
-                "summary": "Gene dossier request",
-                "value": {
-                    "entity_type": "gene",
-                    "preferred_label": "ACVR1",
-                    "source_ids": {"hgnc": "HGNC:171", "entrez": "90"},
-                    "synonyms": [],
-                    "description": "activin A receptor type 1",
-                    "confidence": 0.99,
-                    "provenance": {"source": "hgnc", "method": "exact_symbol"},
-                },
-            }
-        },
-    ),
-    scope: Optional[str] = Body(default=None, examples=["gene_summary"]),
-    filters: Optional[Dict[str, Any]] = Body(default=None, examples={"retmax": 5}),
-    output_profile: Optional[str] = Body(default=None, examples=["default"]),
+    primary_entity: NormalizedEntity = Body(...),
+    scope: Optional[str] = Body(default=None),
+    filters: Optional[Dict[str, Any]] = Body(default=None),
+    output_profile: Optional[str] = Body(default=None),
 ) -> Dossier:
     return await broker.generate_dossier(
         primary_entity=primary_entity,
