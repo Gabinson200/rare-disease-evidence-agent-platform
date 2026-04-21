@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 
 from fastapi import Body, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from .broker import Broker
 from .models import (
@@ -92,6 +93,18 @@ app = FastAPI(
         {"name": "evidence", "description": "Structured evidence retrieval and evidence graph assembly."},
         {"name": "dossiers", "description": "Generate a dossier object around a primary entity for downstream summarization."},
     ],
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:5500",
+        "http://localhost:5500",
+        "null",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 broker = Broker()

@@ -268,6 +268,8 @@ class Broker:
             compound_ids=[primary_entity.source_ids["pubchem"]]
             if primary_entity.entity_type == EntityType.compound and "pubchem" in primary_entity.source_ids
             else None,
+            filters=filters,
+            normalized_bundle=normalized_bundle,
         )
 
         graph = await self.assemble_evidence_graph(

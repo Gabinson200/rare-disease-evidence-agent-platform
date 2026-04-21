@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rare Disease Evidence Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    h1, h2, h3 { margin: 0 0 12px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card { background: #111827; border: 1px solid #334155; border-radius: 14px; padding: 16px; }
+    label { display: block; margin: 10px 0 6px; font-size: 14px; color: #cbd5e1; }
+    input, textarea, select, button { width: 100%; box-sizing: border-box; border-radius: 10px; border: 1px solid #475569; }
+    input, textarea, select { background: #0b1220; color: #e2e8f0; padding: 10px 12px; }
+    textarea { min-height: 120px; resize: vertical; }
+    button { background: #2563eb; color: white; padding: 10px 12px; margin-top: 12px; cursor: pointer; font-weight: 600; }
+    button:hover { background: #1d4ed8; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    pre { background: #020617; color: #cbd5e1; padding: 12px; border-radius: 12px; overflow: auto; max-height: 500px; }
+    .muted { color: #94a3b8; font-size: 14px; }
+    .full { grid-column: 1 / -1; }
+    .pill { display: inline-block; background: #1e293b; border: 1px solid #334155; padding: 4px 8px; border-radius: 999px; font-size: 12px; margin-right: 8px; }
+    @media (max-width: 900px) { .grid, .row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Rare Disease Evidence Demo UI</h1>
+    <p class="muted">A lightweight local frontend for testing your FastAPI backend and demoing normalization, literature search, and dossier generation.</p>
+
+    <div class="card full" style="margin: 16px 0;">
+      <div class="pill">1. Normalize</div>
+      <div class="pill">2. Search literature</div>
+      <div class="pill">3. Generate dossier</div>
+      <p class="muted" style="margin-top: 10px;">Default backend URL is <code>http://127.0.0.1:8000</code>. Start FastAPI first, then use the panels below.</p>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Backend Settings</h2>
+        <label for="baseUrl">Base URL</label>
+        <input id="baseUrl" value="http://127.0.0.1:8000" />
+        <p class="muted">All requests are sent to this FastAPI server.</p>
+      </div>
+
+      <div class="card">
+        <h2>Quick User Stories</h2>
+        <select id="storySelect">
+          <option value="fop">Disease + gene literature search (FOP + ACVR1)</option>
+          <option value="cftr">Gene-first search (CFTR)</option>
+          <option value="wilson">Disease dossier (Wilson disease)</option>
+        </select>
+        <button onclick="loadStory()">Load Story Inputs</button>
+        <p class="muted">This only fills the forms. You still press the endpoint buttons yourself.</p>
+      </div>
+
+      <div class="card">
+        <h2>Normalize General Query</h2>
+        <label for="normalizeBody">POST /normalize</label>
+        <textarea id="normalizeBody">{
+  "raw_query": "fibrodysplasia ossificans progressiva ACVR1",
+  "expected_entity_types": ["disease", "gene"]
+}</textarea>
+        <button onclick="callEndpoint('/normalize', 'POST', 'normalizeBody', 'normalizeOut')">Run /normalize</button>
+      </div>
+
+      <div class="card">
+        <h2>Normalize Gene</h2>
+        <label for="normalizeGeneBody">POST /normalize/gene</label>
+        <textarea id="normalizeGeneBody">{
+  "raw_gene": "ACVR1"
+}</textarea>
+        <button onclick="callEndpoint('/normalize/gene', 'POST', 'normalizeGeneBody', 'normalizeGeneOut')">Run /normalize/gene</button>
+      </div>
+
+      <div class="card">
+        <h2>Literature Search</h2>
+        <label for="literatureBody">POST /search_literature</label>
+        <textarea id="literatureBody">{
+  "keywords": "case report",
+  "filters": {
+    "case_reports_only": true,
+    "retmax": 5
+  },
+  "normalized_bundle": {
+    "entities": [
+      {
+        "entity_type": "disease",
+        "preferred_label": "fibrodysplasia ossificans progressiva",
+        "source_ids": {"orpha": "337", "mondo": "MONDO:0007525"},
+        "synonyms": ["FOP"],
+        "description": null,
+        "confidence": 0.99,
+        "provenance": {"source": "orphadata", "method": "stub_lookup"}
+      },
+      {
+        "entity_type": "gene",
+        "preferred_label": "ACVR1",
+        "source_ids": {"hgnc": "HGNC:171", "entrez": "90"},
+        "synonyms": [],
+        "description": "activin A receptor type 1",
+        "confidence": 0.99,
+        "provenance": {"source": "hgnc", "method": "exact_symbol"}
+      }
+    ]
+  }
+}</textarea>
+        <button onclick="callEndpoint('/search_literature', 'POST', 'literatureBody', 'literatureOut')">Run /search_literature</button>
+      </div>
+
+      <div class="card">
+        <h2>Generate Dossier</h2>
+        <label for="dossierBody">POST /generate_dossier</label>
+        <textarea id="dossierBody">{
+  "primary_entity": {
+    "entity_type": "gene",
+    "preferred_label": "ACVR1",
+    "source_ids": {"hgnc": "HGNC:171", "entrez": "90"},
+    "synonyms": [],
+    "description": "activin A receptor type 1",
+    "confidence": 0.99,
+    "provenance": {"source": "hgnc", "method": "exact_symbol"}
+  },
+  "scope": "gene_summary",
+  "filters": {
+    "retmax": 5
+  },
+  "output_profile": "default"
+}</textarea>
+        <button onclick="callEndpoint('/generate_dossier', 'POST', 'dossierBody', 'dossierOut')">Run /generate_dossier</button>
+      </div>
+
+      <div class="card full">
+        <h2>Outputs</h2>
+        <div class="row">
+          <div>
+            <h3>/normalize</h3>
+            <pre id="normalizeOut">No request yet.</pre>
+          </div>
+          <div>
+            <h3>/normalize/gene</h3>
+            <pre id="normalizeGeneOut">No request yet.</pre>
+          </div>
+        </div>
+        <div class="row" style="margin-top: 12px;">
+          <div>
+            <h3>/search_literature</h3>
+            <pre id="literatureOut">No request yet.</pre>
+          </div>
+          <div>
+            <h3>/generate_dossier</h3>
+            <pre id="dossierOut">No request yet.</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function callEndpoint(path, method, bodyId, outputId) {
+      const baseUrl = document.getElementById('baseUrl').value.trim().replace(/\/$/, '');
+      const raw = document.getElementById(bodyId).value;
+      const out = document.getElementById(outputId);
+      out.textContent = 'Loading...';
+
+      try {
+        const parsed = JSON.parse(raw);
+        const response = await fetch(baseUrl + path, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(parsed)
+        });
+
+        const text = await response.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = text;
+        }
+
+        out.textContent = JSON.stringify({
+          status: response.status,
+          ok: response.ok,
+          data
+        }, null, 2);
+      } catch (err) {
+        out.textContent = JSON.stringify({ error: String(err) }, null, 2);
+      }
+    }
+
+    function loadStory() {
+      const story = document.getElementById('storySelect').value;
+
+      if (story === 'fop') {
+        document.getElementById('normalizeBody').value = JSON.stringify({
+          raw_query: 'fibrodysplasia ossificans progressiva ACVR1',
+          expected_entity_types: ['disease', 'gene']
+        }, null, 2);
+
+        document.getElementById('normalizeGeneBody').value = JSON.stringify({
+          raw_gene: 'ACVR1'
+        }, null, 2);
+
+        document.getElementById('literatureBody').value = JSON.stringify({
+          keywords: 'case report',
+          filters: { case_reports_only: true, retmax: 5 },
+          normalized_bundle: {
+            entities: [
+              {
+                entity_type: 'disease',
+                preferred_label: 'fibrodysplasia ossificans progressiva',
+                source_ids: { orpha: '337', mondo: 'MONDO:0007525' },
+                synonyms: ['FOP'],
+                description: null,
+                confidence: 0.99,
+                provenance: { source: 'orphadata', method: 'stub_lookup' }
+              },
+              {
+                entity_type: 'gene',
+                preferred_label: 'ACVR1',
+                source_ids: { hgnc: 'HGNC:171', entrez: '90' },
+                synonyms: [],
+                description: 'activin A receptor type 1',
+                confidence: 0.99,
+                provenance: { source: 'hgnc', method: 'exact_symbol' }
+              }
+            ]
+          }
+        }, null, 2);
+
+        document.getElementById('dossierBody').value = JSON.stringify({
+          primary_entity: {
+            entity_type: 'gene',
+            preferred_label: 'ACVR1',
+            source_ids: { hgnc: 'HGNC:171', entrez: '90' },
+            synonyms: [],
+            description: 'activin A receptor type 1',
+            confidence: 0.99,
+            provenance: { source: 'hgnc', method: 'exact_symbol' }
+          },
+          scope: 'gene_summary',
+          filters: { retmax: 5 },
+          output_profile: 'default'
+        }, null, 2);
+      }
+
+      if (story === 'cftr') {
+        document.getElementById('normalizeBody').value = JSON.stringify({
+          raw_query: 'CFTR cystic fibrosis',
+          expected_entity_types: ['gene']
+        }, null, 2);
+
+        document.getElementById('normalizeGeneBody').value = JSON.stringify({
+          raw_gene: 'CFTR'
+        }, null, 2);
+
+        document.getElementById('literatureBody').value = JSON.stringify({
+          keywords: 'cystic fibrosis',
+          filters: { retmax: 10 },
+          normalized_bundle: {
+            entities: [
+              {
+                entity_type: 'gene',
+                preferred_label: 'CFTR',
+                source_ids: { hgnc: 'HGNC:1884', entrez: '1080' },
+                synonyms: [],
+                description: 'CF transmembrane conductance regulator',
+                confidence: 0.99,
+                provenance: { source: 'hgnc', method: 'exact_symbol' }
+              }
+            ]
+          }
+        }, null, 2);
+
+        document.getElementById('dossierBody').value = JSON.stringify({
+          primary_entity: {
+            entity_type: 'gene',
+            preferred_label: 'CFTR',
+            source_ids: { hgnc: 'HGNC:1884', entrez: '1080' },
+            synonyms: [],
+            description: 'CF transmembrane conductance regulator',
+            confidence: 0.99,
+            provenance: { source: 'hgnc', method: 'exact_symbol' }
+          },
+          scope: 'gene_summary',
+          filters: { retmax: 5 },
+          output_profile: 'default'
+        }, null, 2);
+      }
+
+      if (story === 'wilson') {
+        document.getElementById('normalizeBody').value = JSON.stringify({
+          raw_query: 'Wilson disease',
+          expected_entity_types: ['disease']
+        }, null, 2);
+
+        document.getElementById('normalizeGeneBody').value = JSON.stringify({
+          raw_gene: 'ATP7B'
+        }, null, 2);
+
+        document.getElementById('literatureBody').value = JSON.stringify({
+          keywords: 'treatment review',
+          filters: { reviews_only: true, retmax: 5 },
+          normalized_bundle: {
+            entities: [
+              {
+                entity_type: 'disease',
+                preferred_label: 'wilson disease',
+                source_ids: { orpha: '905', mondo: 'MONDO:0009651' },
+                synonyms: ['hepatolenticular degeneration'],
+                description: null,
+                confidence: 0.99,
+                provenance: { source: 'orphadata', method: 'stub_lookup' }
+              }
+            ]
+          }
+        }, null, 2);
+
+        document.getElementById('dossierBody').value = JSON.stringify({
+          primary_entity: {
+            entity_type: 'disease',
+            preferred_label: 'wilson disease',
+            source_ids: { orpha: '905', mondo: 'MONDO:0009651' },
+            synonyms: ['hepatolenticular degeneration'],
+            description: null,
+            confidence: 0.99,
+            provenance: { source: 'orphadata', method: 'stub_lookup' }
+          },
+          scope: 'disease_summary',
+          filters: { retmax: 5 },
+          output_profile: 'default'
+        }, null, 2);
+      }
+    }
+  </script>
+</body>
+</html>
