@@ -1,0 +1,1565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rare Disease Evidence Workspace</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121933;
+      --panel-2: #0f1530;
+      --border: #2a3768;
+      --text: #edf2ff;
+      --muted: #aab7e8;
+      --accent: #7aa2ff;
+      --accent-2: #98b6ff;
+      --good: #86efac;
+      --warn: #fcd34d;
+      --bad: #fca5a5;
+      --shadow: 0 16px 36px rgba(0,0,0,0.28);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(180deg, #0a1020 0%, #0b1226 100%);
+      color: var(--text);
+    }
+
+    .shell {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, rgba(122,162,255,0.18), rgba(122,162,255,0.05));
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 24px;
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+    }
+
+    h1, h2, h3, h4 {
+      margin: 0 0 10px;
+      line-height: 1.2;
+    }
+
+    h1 { font-size: 32px; }
+    h2 { font-size: 22px; }
+    h3 { font-size: 18px; }
+    h4 { font-size: 15px; color: var(--muted); font-weight: 600; }
+
+    .muted { color: var(--muted); }
+    .small { font-size: 13px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .column {
+      display: grid;
+      gap: 20px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .row-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      padding: 12px 14px;
+      background: rgba(7, 12, 28, 0.72);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      outline: none;
+    }
+
+    textarea {
+      min-height: 98px;
+      resize: vertical;
+    }
+
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(122,162,255,0.15);
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid transparent;
+      background: linear-gradient(180deg, #7aa2ff, #5d87f3);
+      color: white;
+      border-radius: 12px;
+      padding: 11px 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: 0.16s ease;
+    }
+
+    button:hover { transform: translateY(-1px); filter: brightness(1.04); }
+    button.secondary {
+      background: rgba(122,162,255,0.10);
+      border-color: var(--border);
+      color: var(--accent-2);
+    }
+    button.ghost {
+      background: transparent;
+      border-color: var(--border);
+      color: var(--text);
+    }
+    button.warn {
+      background: rgba(252,211,77,0.12);
+      border-color: rgba(252,211,77,0.35);
+      color: #fde68a;
+    }
+    button.bad {
+      background: rgba(252,165,165,0.12);
+      border-color: rgba(252,165,165,0.35);
+      color: #fecaca;
+    }
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .chips, .entity-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      border: 1px solid var(--border);
+      background: rgba(122,162,255,0.08);
+      color: var(--accent-2);
+      padding: 7px 10px;
+      border-radius: 999px;
+      font-size: 13px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .chip.active {
+      background: rgba(122,162,255,0.22);
+      border-color: var(--accent);
+      color: white;
+    }
+
+    .stack { display: grid; gap: 14px; }
+
+    .entity-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .entity-card {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      background: rgba(5, 10, 25, 0.35);
+      display: grid;
+      gap: 10px;
+    }
+
+    .entity-card.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(122,162,255,0.18) inset;
+    }
+
+    .entity-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .badge.good { color: var(--good); border-color: rgba(134,239,172,0.28); background: rgba(134,239,172,0.08); }
+    .badge.warn { color: var(--warn); border-color: rgba(252,211,77,0.28); background: rgba(252,211,77,0.08); }
+
+    .kv {
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+    }
+
+    .kv div { color: var(--muted); }
+    .kv strong { color: var(--text); }
+
+    .result-block {
+      border-top: 1px solid rgba(255,255,255,0.08);
+      padding-top: 14px;
+      margin-top: 12px;
+    }
+
+    .list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .list-item {
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .empty {
+      border: 1px dashed rgba(255,255,255,0.18);
+      color: var(--muted);
+      border-radius: 14px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .status {
+      margin-top: 10px;
+      min-height: 22px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    details summary {
+      cursor: pointer;
+      color: var(--accent-2);
+      margin-bottom: 10px;
+      user-select: none;
+    }
+
+    pre {
+      margin: 0;
+      padding: 14px;
+      border-radius: 14px;
+      background: #070c1c;
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #dce6ff;
+      overflow: auto;
+      font-size: 12px;
+      line-height: 1.45;
+      max-height: 380px;
+    }
+
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      color: var(--muted);
+      font-size: 12px;
+      margin-right: 6px;
+      margin-top: 4px;
+    }
+
+    .summary-box {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .summary-line {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .graph-panel {
+      margin-top: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      background: #091021;
+      overflow: hidden;
+    }
+
+    .graph-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+    }
+
+    .graph-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 10px;
+      align-items: center;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .legend-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.18);
+      flex: 0 0 auto;
+    }
+
+    .legend-line {
+      width: 18px;
+      height: 0;
+      border-top: 3px solid currentColor;
+      border-radius: 999px;
+      opacity: 0.9;
+      flex: 0 0 auto;
+    }
+
+    .graph-canvas-wrap {
+      position: relative;
+      height: 520px;
+      overflow: hidden;
+    }
+
+    .graph-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(122,162,255,0.08), transparent 25%),
+        radial-gradient(circle at 80% 30%, rgba(134,239,172,0.08), transparent 25%),
+        linear-gradient(180deg, rgba(9,16,33,0.9), rgba(8,13,28,0.98));
+    }
+
+    .graph-canvas.grabbing {
+      cursor: grabbing;
+    }
+
+    .graph-empty {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      padding: 20px;
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .graph-tooltip {
+      position: absolute;
+      max-width: 320px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(7,12,28,0.96);
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.45;
+      box-shadow: var(--shadow);
+      pointer-events: none;
+      opacity: 0;
+      transform: translate(10px, 10px);
+      transition: opacity 0.12s ease;
+      z-index: 10;
+    }
+
+    .graph-tooltip.visible {
+      opacity: 1;
+    }
+
+    .graph-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 10px 12px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    @media (max-width: 1080px) {
+      .graph-canvas-wrap { height: 420px; }
+      .grid, .row, .row-3, .action-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <h1>Rare Disease Evidence Workspace</h1>
+      <p class="muted">
+        A guided frontend for your FastAPI backend. Users type a disease, gene, or symptoms,
+        review normalized entity cards, build a selected bundle, and run structured evidence,
+        literature, graph, or dossier actions without writing raw JSON.
+      </p>
+      <div class="toolbar">
+        <div class="badge">1. Normalize</div>
+        <div class="badge">2. Pick entities</div>
+        <div class="badge">3. Run evidence actions</div>
+        <div class="badge">4. Inspect results</div>
+      </div>
+    </section>
+
+    <div class="grid">
+      <div class="column">
+        <section class="card">
+          <h2>1) Query</h2>
+          <div class="row">
+            <div>
+              <label for="baseUrl">Backend URL</label>
+              <input id="baseUrl" value="http://127.0.0.1:8000" />
+            </div>
+            <div>
+              <label for="keywordsInput">Literature keywords</label>
+              <input id="keywordsInput" placeholder="case report, review, treatment, natural history" />
+            </div>
+          </div>
+
+          <div style="margin-top: 12px;">
+            <label for="queryInput">Ask about a disease, gene, variant, symptoms, compound, or trial</label>
+            <textarea id="queryInput" placeholder="Examples:&#10;fibrodysplasia ossificans progressiva&#10;ACVR1&#10;short stature, hearing loss, delayed speech&#10;fibrodysplasia ossificans progressiva ACVR1"></textarea>
+          </div>
+
+          <div style="margin-top: 12px;">
+            <label>Expected entity types</label>
+            <div class="chips" id="entityTypeChips"></div>
+          </div>
+
+          <div class="toolbar">
+            <button id="normalizeBtn">Normalize query</button>
+            <button class="secondary" id="presetDiseaseGeneBtn">Load disease + gene demo</button>
+            <button class="secondary" id="presetPhenotypeBtn">Load phenotype demo</button>
+            <button class="ghost" id="clearWorkspaceBtn">Clear workspace</button>
+          </div>
+          <div class="status" id="normalizeStatus"></div>
+        </section>
+
+        <section class="card">
+          <div class="entity-header">
+            <div>
+              <h2>2) Normalized candidates</h2>
+              <div class="muted small">Choose the entity cards you want in the active bundle. Set one of them as the primary entity if you want to generate a dossier.</div>
+            </div>
+            <div class="badge" id="candidateCountBadge">0 candidates</div>
+          </div>
+          <div id="candidateCards" class="entity-grid">
+            <div class="empty">Normalize a query to see ranked entity candidates here.</div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>3) Actions</h2>
+          <div class="row-3">
+            <div>
+              <label for="retmaxInput">Literature max results</label>
+              <input id="retmaxInput" type="number" min="1" max="20" value="5" />
+            </div>
+            <div>
+              <label for="maxVariantsInput">Structured max variants</label>
+              <input id="maxVariantsInput" type="number" min="1" max="20" value="5" />
+            </div>
+            <div>
+              <label for="maxTrialsInput">Structured max trials</label>
+              <input id="maxTrialsInput" type="number" min="1" max="20" value="5" />
+            </div>
+          </div>
+
+          <div style="margin-top: 12px;" class="chips">
+            <div class="chip" data-toggle="caseReports" id="caseReportsChip">Case reports</div>
+            <div class="chip" data-toggle="reviewsOnly" id="reviewsOnlyChip">Reviews</div>
+            <div class="chip" data-toggle="requestDiseases" id="requestDiseasesChip">Diseases</div>
+            <div class="chip active" data-toggle="requestGenes" id="requestGenesChip">Genes</div>
+            <div class="chip active" data-toggle="requestVariants" id="requestVariantsChip">Variants</div>
+            <div class="chip" data-toggle="requestPhenotypes" id="requestPhenotypesChip">Phenotypes</div>
+            <div class="chip" data-toggle="requestCompounds" id="requestCompoundsChip">Compounds</div>
+            <div class="chip active" data-toggle="requestTrials" id="requestTrialsChip">Trials</div>
+            <div class="chip active" data-toggle="requestRelationships" id="requestRelationshipsChip">Relationships</div>
+          </div>
+
+          <div class="action-grid" style="margin-top: 14px;">
+            <button id="structuredBtn" disabled>Search structured evidence</button>
+            <button id="literatureBtn" disabled>Search literature</button>
+            <button id="graphBtn" class="secondary" disabled>Assemble graph</button>
+            <button id="dossierBtn" class="secondary" disabled>Generate dossier</button>
+          </div>
+          <div class="status" id="actionStatus"></div>
+        </section>
+
+        <section class="card">
+          <h2>4) Results</h2>
+
+          <div class="result-block">
+            <h3>Structured evidence</h3>
+            <div id="structuredSummary" class="summary-box">
+              <div class="empty">Run structured evidence to see diseases, genes, variants, compounds, trials, and relationships.</div>
+            </div>
+            <details>
+              <summary>Raw structured response</summary>
+              <pre id="structuredJson">No structured response yet.</pre>
+            </details>
+          </div>
+
+          <div class="result-block">
+            <h3>Literature</h3>
+            <div id="literatureSummary" class="list">
+              <div class="empty">Run literature search to see papers here.</div>
+            </div>
+            <details>
+              <summary>Raw literature response</summary>
+              <pre id="literatureJson">No literature response yet.</pre>
+            </details>
+          </div>
+
+          <div class="result-block">
+            <h3>Evidence graph</h3>
+            <div id="graphSummary" class="summary-box">
+              <div class="empty">Assemble the graph after you have structured evidence or literature.</div>
+            </div>
+            <div class="graph-panel">
+              <div class="graph-toolbar">
+                <div class="graph-legend" id="graphNodeLegend"></div>
+                <div class="graph-legend" id="graphEdgeLegend"></div>
+              </div>
+              <div class="graph-canvas-wrap" id="graphCanvasWrap">
+                <svg id="graphSvg" class="graph-canvas" viewBox="0 0 1000 520" preserveAspectRatio="xMidYMid meet"></svg>
+                <div id="graphEmpty" class="graph-empty">Assemble a graph or generate a dossier to see a visual network of evidence nodes and edges.</div>
+                <div id="graphTooltip" class="graph-tooltip"></div>
+              </div>
+              <div class="graph-meta" id="graphMeta">
+                <span>Graph source: none</span>
+              </div>
+            </div>
+            <details>
+              <summary>Raw graph response</summary>
+              <pre id="graphJson">No graph response yet.</pre>
+            </details>
+          </div>
+
+          <div class="result-block">
+            <h3>Dossier</h3>
+            <div id="dossierSummary" class="summary-box">
+              <div class="empty">Generate a dossier after choosing a primary entity.</div>
+            </div>
+            <details>
+              <summary>Raw dossier response</summary>
+              <pre id="dossierJson">No dossier response yet.</pre>
+            </details>
+          </div>
+        </section>
+      </div>
+
+      <div class="column">
+        <section class="card">
+          <div class="entity-header">
+            <div>
+              <h2>Selected bundle</h2>
+              <div class="muted small">These are the entities the workspace will send as <code>normalized_bundle</code>.</div>
+            </div>
+            <div class="badge" id="bundleCountBadge">0 selected</div>
+          </div>
+          <div id="bundleEntities" class="stack">
+            <div class="empty">Select one or more entity cards from the normalization results.</div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="entity-header">
+            <div>
+              <h2>Primary entity</h2>
+              <div class="muted small">The dossier action uses a single entity as <code>primary_entity</code>.</div>
+            </div>
+            <button class="ghost small" id="clearPrimaryBtn">Clear primary</button>
+          </div>
+          <div id="primaryEntityBox">
+            <div class="empty">No primary entity selected yet.</div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>How this UI maps to your API</h2>
+          <div class="list">
+            <div class="list-item">
+              <strong>Normalize query</strong>
+              <div class="muted small">Calls <code>POST /normalize</code> with your free-text query and selected expected entity types.</div>
+            </div>
+            <div class="list-item">
+              <strong>Selected bundle</strong>
+              <div class="muted small">The chosen cards become <code>normalized_bundle.entities</code> for structured and literature actions.</div>
+            </div>
+            <div class="list-item">
+              <strong>Primary entity</strong>
+              <div class="muted small">A single chosen card becomes <code>primary_entity</code> for <code>POST /generate_dossier</code>.</div>
+            </div>
+            <div class="list-item">
+              <strong>Advanced / developer view</strong>
+              <div class="muted small">Every result section includes a raw JSON viewer so you can still inspect the underlying API responses.</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Suggested workflows</h2>
+          <div class="list">
+            <div class="list-item">
+              <strong>Disease dossier</strong>
+              <div class="muted small">Normalize a disease → select the top disease card → set it as primary → generate dossier.</div>
+            </div>
+            <div class="list-item">
+              <strong>Disease + gene evidence</strong>
+              <div class="muted small">Normalize a mixed query → select both disease and gene → run structured evidence and literature → assemble graph.</div>
+            </div>
+            <div class="list-item">
+              <strong>Phenotype-first discovery</strong>
+              <div class="muted small">Normalize symptoms/phenotypes → select phenotype cards → run structured evidence to get candidate diseases.</div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      expectedTypes: new Set(),
+      normalizedResponse: null,
+      selectedKeys: new Set(),
+      selectedEntities: [],
+      primaryEntityKey: null,
+      primaryEntity: null,
+      structuredResponse: null,
+      literatureResponse: null,
+      graphResponse: null,
+      dossierResponse: null,
+      toggles: {
+        caseReports: false,
+        reviewsOnly: false,
+        requestDiseases: false,
+        requestGenes: true,
+        requestVariants: true,
+        requestPhenotypes: false,
+        requestCompounds: false,
+        requestTrials: true,
+        requestRelationships: true,
+      }
+    };
+
+    const ENTITY_TYPES = [
+      { key: 'disease', label: 'Disease' },
+      { key: 'gene', label: 'Gene' },
+      { key: 'phenotype', label: 'Phenotype' },
+      { key: 'variant', label: 'Variant' },
+      { key: 'compound', label: 'Compound' },
+      { key: 'trial', label: 'Trial' },
+    ];
+
+    const NODE_COLORS = {
+      disease: '#ff8fab',
+      gene: '#7aa2ff',
+      phenotype: '#ffd166',
+      variant: '#f97316',
+      compound: '#34d399',
+      trial: '#c084fc',
+      article: '#94a3b8',
+      unknown: '#64748b',
+    };
+
+    const EDGE_COLORS = {
+      medgen: '#f59e0b',
+      clinvar: '#fb7185',
+      clinicaltrials: '#22c55e',
+      pubmed: '#60a5fa',
+      europepmc: '#38bdf8',
+      derived: '#a78bfa',
+      structured: '#e5e7eb',
+      unknown: '#64748b',
+    };
+
+    const el = (id) => document.getElementById(id);
+
+    function entityKey(entity) {
+      const keys = ['orpha', 'mondo', 'medgen', 'medgen_uid', 'mesh', 'hpo', 'hgnc', 'entrez', 'clinvar', 'vcv', 'rcv', 'scv', 'dbsnp', 'pubchem', 'inchikey', 'smiles', 'nct', 'pmid', 'pmcid', 'doi'];
+      const sourceIds = entity.source_ids || {};
+      for (const key of keys) {
+        if (sourceIds[key]) return `${entity.entity_type}:${key}:${sourceIds[key]}`;
+      }
+      return `${entity.entity_type}:label:${(entity.preferred_label || '').toLowerCase()}`;
+    }
+
+    function confidenceBadge(conf) {
+      if (conf >= 0.9) return `<span class="badge good">confidence ${conf.toFixed(2)}</span>`;
+      if (conf >= 0.75) return `<span class="badge warn">confidence ${conf.toFixed(2)}</span>`;
+      return `<span class="badge">confidence ${conf.toFixed(2)}</span>`;
+    }
+
+    function prettyType(type) {
+      return type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Entity';
+    }
+
+    function safeJson(value) {
+      return JSON.stringify(value, null, 2);
+    }
+
+    function setStatus(id, text, isError = false) {
+      const node = el(id);
+      node.textContent = text || '';
+      node.style.color = isError ? 'var(--bad)' : 'var(--muted)';
+    }
+
+    function getBaseUrl() {
+      return el('baseUrl').value.trim().replace(/\/$/, '');
+    }
+
+    async function apiPost(path, payload) {
+      const response = await fetch(`${getBaseUrl()}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const text = await response.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = text; }
+
+      if (!response.ok) {
+        throw new Error(typeof data === 'string' ? data : safeJson(data));
+      }
+      return data;
+    }
+
+    function renderEntityTypeChips() {
+      const container = el('entityTypeChips');
+      container.innerHTML = '';
+      for (const type of ENTITY_TYPES) {
+        const chip = document.createElement('button');
+        chip.className = 'chip' + (state.expectedTypes.has(type.key) ? ' active' : '');
+        chip.textContent = type.label;
+        chip.type = 'button';
+        chip.onclick = () => {
+          if (state.expectedTypes.has(type.key)) state.expectedTypes.delete(type.key);
+          else state.expectedTypes.add(type.key);
+          renderEntityTypeChips();
+        };
+        container.appendChild(chip);
+      }
+    }
+
+    function createEntityCard(entity, isSelected) {
+      const card = document.createElement('div');
+      card.className = 'entity-card' + (isSelected ? ' selected' : '');
+
+      const key = entityKey(entity);
+      const sourcePairs = Object.entries(entity.source_ids || {}).slice(0, 6);
+      const sourceHtml = sourcePairs.length
+        ? sourcePairs.map(([k, v]) => `<span class="pill">${k}: ${v}</span>`).join('')
+        : '<span class="muted small">No source IDs</span>';
+
+      const synonymHtml = (entity.synonyms || []).length
+        ? (entity.synonyms || []).slice(0, 5).map(s => `<span class="pill">${s}</span>`).join('')
+        : '<span class="muted small">No synonyms</span>';
+
+      card.innerHTML = `
+        <div class="entity-header">
+          <div>
+            <h3>${entity.preferred_label || 'Unnamed entity'}</h3>
+            <div class="muted small">${prettyType(entity.entity_type)}</div>
+          </div>
+          <div>${confidenceBadge(Number(entity.confidence || 0))}</div>
+        </div>
+        <div class="kv">
+          <div><strong>IDs:</strong></div>
+          <div>${sourceHtml}</div>
+          <div><strong>Synonyms:</strong></div>
+          <div>${synonymHtml}</div>
+          <div><strong>Description:</strong> ${entity.description ? entity.description : '<span class="muted">None</span>'}</div>
+        </div>
+        <div class="toolbar">
+          <button class="${isSelected ? 'warn' : ''}" data-action="toggle">${isSelected ? 'Remove from bundle' : 'Add to bundle'}</button>
+          <button class="secondary" data-action="primary">Set as primary</button>
+        </div>
+      `;
+
+      card.querySelector('[data-action="toggle"]').onclick = () => toggleBundleEntity(entity);
+      card.querySelector('[data-action="primary"]').onclick = () => setPrimaryEntity(entity);
+      return card;
+    }
+
+    function renderCandidates() {
+      const container = el('candidateCards');
+      const entities = state.normalizedResponse?.entities || [];
+      el('candidateCountBadge').textContent = `${entities.length} candidate${entities.length === 1 ? '' : 's'}`;
+
+      if (!entities.length) {
+        container.innerHTML = '<div class="empty">Normalize a query to see ranked entity candidates here.</div>';
+        return;
+      }
+
+      container.innerHTML = '';
+      for (const entity of entities) {
+        const key = entityKey(entity);
+        container.appendChild(createEntityCard(entity, state.selectedKeys.has(key)));
+      }
+    }
+
+    function renderBundle() {
+      const container = el('bundleEntities');
+      const entities = state.selectedEntities;
+      el('bundleCountBadge').textContent = `${entities.length} selected`;
+
+      if (!entities.length) {
+        container.innerHTML = '<div class="empty">Select one or more entity cards from the normalization results.</div>';
+      } else {
+        container.innerHTML = '';
+        for (const entity of entities) {
+          const block = document.createElement('div');
+          block.className = 'list-item';
+          block.innerHTML = `
+            <div class="entity-header">
+              <div>
+                <strong>${entity.preferred_label}</strong>
+                <div class="muted small">${prettyType(entity.entity_type)}</div>
+              </div>
+              <button class="ghost" type="button">Remove</button>
+            </div>
+            <div class="entity-tags">${Object.entries(entity.source_ids || {}).slice(0, 5).map(([k, v]) => `<span class="pill">${k}: ${v}</span>`).join('')}</div>
+          `;
+          block.querySelector('button').onclick = () => toggleBundleEntity(entity);
+          container.appendChild(block);
+        }
+      }
+
+      const hasSelection = entities.length > 0;
+      el('structuredBtn').disabled = !hasSelection;
+      el('literatureBtn').disabled = !hasSelection;
+      el('graphBtn').disabled = !(hasSelection && (state.structuredResponse || state.literatureResponse));
+      el('dossierBtn').disabled = !state.primaryEntity;
+    }
+
+    function renderPrimary() {
+      const box = el('primaryEntityBox');
+      if (!state.primaryEntity) {
+        box.innerHTML = '<div class="empty">No primary entity selected yet.</div>';
+        return;
+      }
+
+      const entity = state.primaryEntity;
+      box.innerHTML = `
+        <div class="list-item">
+          <div class="entity-header">
+            <div>
+              <strong>${entity.preferred_label}</strong>
+              <div class="muted small">${prettyType(entity.entity_type)}</div>
+            </div>
+            ${confidenceBadge(Number(entity.confidence || 0))}
+          </div>
+          <div class="entity-tags">${Object.entries(entity.source_ids || {}).slice(0, 6).map(([k, v]) => `<span class="pill">${k}: ${v}</span>`).join('')}</div>
+        </div>
+      `;
+      el('dossierBtn').disabled = false;
+    }
+
+    function renderStructuredSummary() {
+      const container = el('structuredSummary');
+      const data = state.structuredResponse;
+      el('structuredJson').textContent = data ? safeJson(data) : 'No structured response yet.';
+
+      if (!data) {
+        container.innerHTML = '<div class="empty">Run structured evidence to see diseases, genes, variants, compounds, trials, and relationships.</div>';
+        return;
+      }
+
+      const counts = {
+        diseases: data.diseases?.length || 0,
+        genes: data.genes?.length || 0,
+        variants: data.variants?.length || 0,
+        phenotypes: data.phenotypes?.length || 0,
+        compounds: data.compounds?.length || 0,
+        trials: data.trials?.length || 0,
+        relationships: data.relationships?.length || 0,
+      };
+
+      container.innerHTML = `
+        <div class="summary-line">Diseases: <strong>${counts.diseases}</strong></div>
+        <div class="summary-line">Genes: <strong>${counts.genes}</strong></div>
+        <div class="summary-line">Variants: <strong>${counts.variants}</strong></div>
+        <div class="summary-line">Phenotypes: <strong>${counts.phenotypes}</strong></div>
+        <div class="summary-line">Compounds: <strong>${counts.compounds}</strong></div>
+        <div class="summary-line">Trials: <strong>${counts.trials}</strong></div>
+        <div class="summary-line">Relationships: <strong>${counts.relationships}</strong></div>
+      `;
+    }
+
+    function renderLiteratureSummary() {
+      const container = el('literatureSummary');
+      const data = state.literatureResponse;
+      el('literatureJson').textContent = data ? safeJson(data) : 'No literature response yet.';
+
+      if (!data || !data.length) {
+        container.innerHTML = '<div class="empty">Run literature search to see papers here.</div>';
+        return;
+      }
+
+      container.innerHTML = '';
+      for (const paper of data.slice(0, 10)) {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        div.innerHTML = `
+          <strong>${paper.title || 'Untitled paper'}</strong>
+          <div class="muted small">${paper.journal || 'Unknown journal'}${paper.year ? ' · ' + paper.year : ''}${paper.pmid ? ' · PMID ' + paper.pmid : ''}</div>
+          <div class="muted small" style="margin-top: 6px;">${paper.abstract ? paper.abstract.slice(0, 280) + (paper.abstract.length > 280 ? '…' : '') : 'No abstract available.'}</div>
+        `;
+        container.appendChild(div);
+      }
+    }
+
+    function renderGraphLegend() {
+      const nodeLegend = el('graphNodeLegend');
+      const edgeLegend = el('graphEdgeLegend');
+      nodeLegend.innerHTML = '';
+      edgeLegend.innerHTML = '';
+
+      const nodeEntries = [
+        ['disease', 'Disease'],
+        ['gene', 'Gene'],
+        ['phenotype', 'Phenotype'],
+        ['variant', 'Variant'],
+        ['compound', 'Compound'],
+        ['trial', 'Trial'],
+        ['article', 'Article'],
+      ];
+      for (const [key, label] of nodeEntries) {
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        item.innerHTML = `<span class="legend-swatch" style="background:${NODE_COLORS[key] || NODE_COLORS.unknown}"></span>${label}`;
+        nodeLegend.appendChild(item);
+      }
+
+      const edgeEntries = [
+        ['clinvar', 'ClinVar'],
+        ['clinicaltrials', 'Trials'],
+        ['medgen', 'MedGen'],
+        ['pubmed', 'PubMed'],
+        ['derived', 'Derived'],
+      ];
+      for (const [key, label] of edgeEntries) {
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        item.style.color = EDGE_COLORS[key] || EDGE_COLORS.unknown;
+        item.innerHTML = `<span class="legend-line"></span>${label}`;
+        edgeLegend.appendChild(item);
+      }
+    }
+
+    function getActiveGraphData() {
+      if (state.graphResponse && (state.graphResponse.nodes || state.graphResponse.edges)) {
+        return { graph: state.graphResponse, source: 'assembled graph' };
+      }
+      if (state.dossierResponse?.evidence_graph) {
+        return { graph: state.dossierResponse.evidence_graph, source: 'dossier graph' };
+      }
+      return { graph: null, source: 'none' };
+    }
+
+    function inferEdgeColor(edge) {
+      const source = String(edge.source || '').toLowerCase();
+      if (EDGE_COLORS[source]) return EDGE_COLORS[source];
+      if (String(edge.edge_type || '').includes('article')) return EDGE_COLORS.derived;
+      return EDGE_COLORS.unknown;
+    }
+
+    function renderGraphVisualization() {
+      const { graph, source } = getActiveGraphData();
+      const svg = el('graphSvg');
+      const empty = el('graphEmpty');
+      const meta = el('graphMeta');
+      const tooltip = el('graphTooltip');
+      tooltip.classList.remove('visible');
+      svg.innerHTML = '';
+      meta.innerHTML = `<span>Graph source: ${source}</span>`;
+
+      if (!graph || !(graph.nodes || []).length) {
+        empty.style.display = 'flex';
+        return;
+      }
+      empty.style.display = 'none';
+
+      const width = 1000;
+      const height = 520;
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const nodes = (graph.nodes || []).map((node, index) => ({
+        data: node,
+        key: entityKey(node),
+        index,
+      }));
+      const nodeMap = new Map(nodes.map(n => [n.key, n]));
+      const edges = (graph.edges || []).filter(edge => nodeMap.has(edge.subject_key) && nodeMap.has(edge.object_key));
+
+      const degree = {};
+      for (const node of nodes) degree[node.key] = 0;
+      for (const edge of edges) {
+        degree[edge.subject_key] = (degree[edge.subject_key] || 0) + 1;
+        degree[edge.object_key] = (degree[edge.object_key] || 0) + 1;
+      }
+
+      nodes.forEach((node, index) => {
+        const angle = (Math.PI * 2 * index) / Math.max(nodes.length, 1);
+        const ring = 130 + (index % 4) * 28;
+        node.x = centerX + Math.cos(angle) * ring;
+        node.y = centerY + Math.sin(angle) * ring;
+        node.vx = 0;
+        node.vy = 0;
+        node.radius = Math.max(10, Math.min(26, 10 + (degree[node.key] || 0) * 1.4));
+      });
+
+      for (let step = 0; step < 220; step++) {
+        for (let i = 0; i < nodes.length; i++) {
+          for (let j = i + 1; j < nodes.length; j++) {
+            const a = nodes[i];
+            const b = nodes[j];
+            let dx = b.x - a.x;
+            let dy = b.y - a.y;
+            let dist2 = dx * dx + dy * dy + 0.1;
+            let dist = Math.sqrt(dist2);
+            const force = 2600 / dist2;
+            const fx = (dx / dist) * force;
+            const fy = (dy / dist) * force;
+            a.vx -= fx;
+            a.vy -= fy;
+            b.vx += fx;
+            b.vy += fy;
+          }
+        }
+
+        for (const edge of edges) {
+          const a = nodeMap.get(edge.subject_key);
+          const b = nodeMap.get(edge.object_key);
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) + 0.001;
+          const desired = 120;
+          const force = (dist - desired) * 0.006;
+          const fx = (dx / dist) * force;
+          const fy = (dy / dist) * force;
+          a.vx += fx;
+          a.vy += fy;
+          b.vx -= fx;
+          b.vy -= fy;
+        }
+
+        for (const node of nodes) {
+          const toCenterX = centerX - node.x;
+          const toCenterY = centerY - node.y;
+          node.vx += toCenterX * 0.0009;
+          node.vy += toCenterY * 0.0009;
+          node.vx *= 0.88;
+          node.vy *= 0.88;
+          node.x += node.vx;
+          node.y += node.vy;
+          node.x = Math.max(30, Math.min(width - 30, node.x));
+          node.y = Math.max(30, Math.min(height - 30, node.y));
+        }
+      }
+
+      const ns = 'http://www.w3.org/2000/svg';
+      const defs = document.createElementNS(ns, 'defs');
+      const glow = document.createElementNS(ns, 'filter');
+      glow.setAttribute('id', 'nodeGlow');
+      glow.innerHTML = '<feGaussianBlur stdDeviation="2.2" result="coloredBlur"></feGaussianBlur><feMerge><feMergeNode in="coloredBlur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>';
+      defs.appendChild(glow);
+      svg.appendChild(defs);
+
+      const edgeGroup = document.createElementNS(ns, 'g');
+      const nodeGroup = document.createElementNS(ns, 'g');
+      const labelGroup = document.createElementNS(ns, 'g');
+      svg.appendChild(edgeGroup);
+      svg.appendChild(nodeGroup);
+      svg.appendChild(labelGroup);
+
+      const clampTooltip = (x, y) => {
+        const wrap = el('graphCanvasWrap').getBoundingClientRect();
+        const maxX = wrap.width - 340;
+        const maxY = wrap.height - 120;
+        return {
+          x: Math.max(10, Math.min(maxX, x)),
+          y: Math.max(10, Math.min(maxY, y)),
+        };
+      };
+
+      const showTooltip = (evt, html) => {
+        const wrap = el('graphCanvasWrap').getBoundingClientRect();
+        const pos = clampTooltip(evt.clientX - wrap.left + 10, evt.clientY - wrap.top + 10);
+        tooltip.innerHTML = html;
+        tooltip.style.left = `${pos.x}px`;
+        tooltip.style.top = `${pos.y}px`;
+        tooltip.classList.add('visible');
+      };
+
+      const hideTooltip = () => tooltip.classList.remove('visible');
+
+      for (const edge of edges) {
+        const a = nodeMap.get(edge.subject_key);
+        const b = nodeMap.get(edge.object_key);
+        const line = document.createElementNS(ns, 'line');
+        line.setAttribute('x1', a.x);
+        line.setAttribute('y1', a.y);
+        line.setAttribute('x2', b.x);
+        line.setAttribute('y2', b.y);
+        line.setAttribute('stroke', inferEdgeColor(edge));
+        line.setAttribute('stroke-width', String(Math.max(1.5, Math.min(4.5, 1.4 + Number(edge.confidence || 0) * 2.6))));
+        line.setAttribute('stroke-opacity', '0.68');
+        line.addEventListener('mousemove', (evt) => {
+          showTooltip(evt, `<strong>${edge.edge_type || 'related_to'}</strong><br>source: ${edge.source || 'unknown'}<br>confidence: ${Number(edge.confidence || 0).toFixed(2)}`);
+        });
+        line.addEventListener('mouseleave', hideTooltip);
+        edgeGroup.appendChild(line);
+      }
+
+      for (const node of nodes) {
+        const type = node.data.entity_type || 'unknown';
+        const color = NODE_COLORS[type] || NODE_COLORS.unknown;
+
+        const circle = document.createElementNS(ns, 'circle');
+        circle.setAttribute('cx', node.x);
+        circle.setAttribute('cy', node.y);
+        circle.setAttribute('r', node.radius);
+        circle.setAttribute('fill', color);
+        circle.setAttribute('fill-opacity', '0.88');
+        circle.setAttribute('stroke', 'rgba(255,255,255,0.55)');
+        circle.setAttribute('stroke-width', '1.4');
+        circle.setAttribute('filter', 'url(#nodeGlow)');
+        circle.addEventListener('mousemove', (evt) => {
+          const ids = Object.entries(node.data.source_ids || {}).slice(0, 4).map(([k, v]) => `${k}: ${v}`).join('<br>');
+          showTooltip(
+            evt,
+            `<strong>${node.data.preferred_label || 'Unnamed node'}</strong><br>` +
+            `type: ${type}<br>` +
+            `confidence: ${Number(node.data.confidence || 0).toFixed(2)}` +
+            (ids ? `<br>${ids}` : '')
+          );
+        });
+        circle.addEventListener('mouseleave', hideTooltip);
+        nodeGroup.appendChild(circle);
+
+        const label = document.createElementNS(ns, 'text');
+        label.setAttribute('x', node.x);
+        label.setAttribute('y', node.y + node.radius + 13);
+        label.setAttribute('fill', '#dbe7ff');
+        label.setAttribute('font-size', node.data.entity_type === 'article' ? '10' : '11');
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('opacity', '0.9');
+        const rawLabel = node.data.preferred_label || 'Unnamed';
+        label.textContent = rawLabel.length > 28 ? rawLabel.slice(0, 28) + '…' : rawLabel;
+        labelGroup.appendChild(label);
+      }
+
+      meta.innerHTML = `
+        <span>Graph source: ${source}</span>
+        <span>Nodes: ${(graph.nodes || []).length}</span>
+        <span>Edges: ${(graph.edges || []).length}</span>
+        <span>Profile: ${(graph.explanation || {}).scoring_profile || 'default'}</span>
+      `;
+    }
+
+    function renderGraphSummary() {
+      const container = el('graphSummary');
+      const { graph, source } = getActiveGraphData();
+      el('graphJson').textContent = graph ? safeJson(graph) : 'No graph response yet.';
+
+      if (!graph) {
+        container.innerHTML = '<div class="empty">Assemble the graph after you have structured evidence or literature.</div>';
+        renderGraphVisualization();
+        return;
+      }
+
+      const summaries = graph.ranked_summaries || [];
+      const explanation = graph.explanation || {};
+      container.innerHTML = '';
+
+      if (summaries.length) {
+        for (const line of summaries) {
+          const div = document.createElement('div');
+          div.className = 'summary-line';
+          div.textContent = line;
+          container.appendChild(div);
+        }
+      }
+
+      const extra = document.createElement('div');
+      extra.className = 'summary-line';
+      extra.innerHTML = `Nodes: <strong>${(graph.nodes || []).length}</strong> · Edges: <strong>${(graph.edges || []).length}</strong> · Source: <strong>${source}</strong>`;
+      container.appendChild(extra);
+
+      if (Object.keys(explanation).length) {
+        const detail = document.createElement('div');
+        detail.className = 'summary-line';
+        detail.innerHTML = `Profile: <strong>${explanation.scoring_profile || 'default'}</strong>`;
+        container.appendChild(detail);
+      }
+
+      renderGraphVisualization();
+    }
+
+    function renderDossierSummary() {
+      const container = el('dossierSummary');
+      const data = state.dossierResponse;
+      el('dossierJson').textContent = data ? safeJson(data) : 'No dossier response yet.';
+
+      if (!data) {
+        container.innerHTML = '<div class="empty">Generate a dossier after choosing a primary entity.</div>';
+        return;
+      }
+
+      container.innerHTML = '';
+      const primary = data.primary_entity;
+      const summaryBlocks = data.summary_blocks || [];
+      const refs = data.citation_references || [];
+
+      const head = document.createElement('div');
+      head.className = 'summary-line';
+      head.innerHTML = `Primary entity: <strong>${primary?.preferred_label || 'Unknown'}</strong> · Type: <strong>${primary?.entity_type || 'unknown'}</strong>`;
+      container.appendChild(head);
+
+      for (const block of summaryBlocks) {
+        const div = document.createElement('div');
+        div.className = 'summary-line';
+        div.textContent = block;
+        container.appendChild(div);
+      }
+
+      if (refs.length) {
+        const refDiv = document.createElement('div');
+        refDiv.className = 'summary-line';
+        refDiv.innerHTML = `<strong>Citations:</strong> ${refs.slice(0, 8).join(', ')}`;
+        container.appendChild(refDiv);
+      }
+    }
+
+    function renderAll() {
+      renderEntityTypeChips();
+      renderToggleChips();
+      renderGraphLegend();
+      renderCandidates();
+      renderBundle();
+      renderPrimary();
+      renderStructuredSummary();
+      renderLiteratureSummary();
+      renderGraphSummary();
+      renderDossierSummary();
+    }
+
+    function toggleBundleEntity(entity) {
+      const key = entityKey(entity);
+      if (state.selectedKeys.has(key)) {
+        state.selectedKeys.delete(key);
+        state.selectedEntities = state.selectedEntities.filter(e => entityKey(e) !== key);
+        if (state.primaryEntityKey === key) {
+          state.primaryEntityKey = null;
+          state.primaryEntity = null;
+        }
+      } else {
+        state.selectedKeys.add(key);
+        state.selectedEntities.push(entity);
+      }
+      renderAll();
+    }
+
+    function setPrimaryEntity(entity) {
+      state.primaryEntityKey = entityKey(entity);
+      state.primaryEntity = entity;
+      if (!state.selectedKeys.has(state.primaryEntityKey)) {
+        state.selectedKeys.add(state.primaryEntityKey);
+        state.selectedEntities.push(entity);
+      }
+      renderAll();
+    }
+
+    function buildNormalizedBundle() {
+      return { entities: state.selectedEntities };
+    }
+
+    function buildRequestedEvidenceTypes() {
+      const out = [];
+      if (state.toggles.requestDiseases) out.push('diseases');
+      if (state.toggles.requestGenes) out.push('genes');
+      if (state.toggles.requestVariants) out.push('variants');
+      if (state.toggles.requestPhenotypes) out.push('phenotypes');
+      if (state.toggles.requestCompounds) out.push('compounds');
+      if (state.toggles.requestTrials) out.push('trials');
+      if (state.toggles.requestRelationships) out.push('relationships');
+      return out;
+    }
+
+    function buildStructuredPayload() {
+      return {
+        normalized_bundle: buildNormalizedBundle(),
+        requested_evidence_types: buildRequestedEvidenceTypes(),
+        filters: {
+          max_variant_candidates: Number(el('maxVariantsInput').value || 5),
+          max_trial_candidates: Number(el('maxTrialsInput').value || 5),
+          max_disease_candidates: 10,
+        }
+      };
+    }
+
+    function buildLiteraturePayload() {
+      return {
+        keywords: el('keywordsInput').value.trim() || null,
+        normalized_bundle: buildNormalizedBundle(),
+        filters: {
+          case_reports_only: !!state.toggles.caseReports,
+          reviews_only: !!state.toggles.reviewsOnly,
+          retmax: Number(el('retmaxInput').value || 5),
+        }
+      };
+    }
+
+    function buildGraphPayload() {
+      return {
+        normalized_bundle: buildNormalizedBundle(),
+        literature_results: state.literatureResponse || [],
+        structured_evidence_results: state.structuredResponse || {
+          diseases: [], genes: [], variants: [], phenotypes: [], compounds: [], trials: [], relationships: []
+        },
+        scoring_profile: 'default'
+      };
+    }
+
+    function buildDossierPayload() {
+      return {
+        primary_entity: state.primaryEntity,
+        scope: `${state.primaryEntity?.entity_type || 'entity'}_summary`,
+        filters: {
+          retmax: Number(el('retmaxInput').value || 5),
+          max_variant_candidates: Number(el('maxVariantsInput').value || 5),
+          max_trial_candidates: Number(el('maxTrialsInput').value || 5),
+        },
+        output_profile: 'default'
+      };
+    }
+
+    async function runNormalize() {
+      const rawQuery = el('queryInput').value.trim();
+      if (!rawQuery) {
+        setStatus('normalizeStatus', 'Enter a query first.', true);
+        return;
+      }
+
+      setStatus('normalizeStatus', 'Normalizing query...');
+      try {
+        const payload = {
+          raw_query: rawQuery,
+          expected_entity_types: Array.from(state.expectedTypes),
+        };
+        const data = await apiPost('/normalize', payload);
+        state.normalizedResponse = data;
+        state.selectedKeys = new Set();
+        state.selectedEntities = [];
+        state.primaryEntity = null;
+        state.primaryEntityKey = null;
+        state.structuredResponse = null;
+        state.literatureResponse = null;
+        state.graphResponse = null;
+        state.dossierResponse = null;
+        setStatus('normalizeStatus', `Found ${(data.entities || []).length} normalized candidate(s).`);
+        renderAll();
+      } catch (err) {
+        setStatus('normalizeStatus', `Normalize failed: ${String(err)}`, true);
+      }
+    }
+
+    async function runStructured() {
+      if (!state.selectedEntities.length) return;
+      setStatus('actionStatus', 'Fetching structured evidence...');
+      try {
+        const data = await apiPost('/search_structured', buildStructuredPayload());
+        state.structuredResponse = data;
+        setStatus('actionStatus', 'Structured evidence loaded.');
+        renderAll();
+      } catch (err) {
+        setStatus('actionStatus', `Structured evidence failed: ${String(err)}`, true);
+      }
+    }
+
+    async function runLiterature() {
+      if (!state.selectedEntities.length) return;
+      setStatus('actionStatus', 'Searching literature...');
+      try {
+        const data = await apiPost('/search_literature', buildLiteraturePayload());
+        state.literatureResponse = data;
+        setStatus('actionStatus', `Loaded ${data.length || 0} literature result(s).`);
+        renderAll();
+      } catch (err) {
+        setStatus('actionStatus', `Literature search failed: ${String(err)}`, true);
+      }
+    }
+
+    async function runGraph() {
+      if (!state.selectedEntities.length) return;
+      setStatus('actionStatus', 'Assembling evidence graph...');
+      try {
+        const data = await apiPost('/assemble_graph', buildGraphPayload());
+        state.graphResponse = data;
+        setStatus('actionStatus', 'Evidence graph assembled.');
+        renderAll();
+      } catch (err) {
+        setStatus('actionStatus', `Graph assembly failed: ${String(err)}`, true);
+      }
+    }
+
+    async function runDossier() {
+      if (!state.primaryEntity) return;
+      setStatus('actionStatus', 'Generating dossier...');
+      try {
+        const data = await apiPost('/generate_dossier', buildDossierPayload());
+        state.dossierResponse = data;
+        setStatus('actionStatus', 'Dossier generated.');
+        renderAll();
+      } catch (err) {
+        setStatus('actionStatus', `Dossier generation failed: ${String(err)}`, true);
+      }
+    }
+
+    function applyPresetDiseaseGene() {
+      el('queryInput').value = 'fibrodysplasia ossificans progressiva ACVR1';
+      el('keywordsInput').value = 'case report';
+      state.expectedTypes = new Set(['disease', 'gene']);
+      renderAll();
+    }
+
+    function applyPresetPhenotype() {
+      el('queryInput').value = 'short stature, hearing loss, delayed speech';
+      el('keywordsInput').value = '';
+      state.expectedTypes = new Set(['phenotype']);
+      state.toggles.requestDiseases = true;
+      state.toggles.requestPhenotypes = true;
+      renderToggleChips();
+      renderAll();
+    }
+
+    function clearWorkspace() {
+      el('queryInput').value = '';
+      el('keywordsInput').value = '';
+      state.expectedTypes = new Set();
+      state.normalizedResponse = null;
+      state.selectedKeys = new Set();
+      state.selectedEntities = [];
+      state.primaryEntityKey = null;
+      state.primaryEntity = null;
+      state.structuredResponse = null;
+      state.literatureResponse = null;
+      state.graphResponse = null;
+      state.dossierResponse = null;
+      setStatus('normalizeStatus', '');
+      setStatus('actionStatus', '');
+      renderAll();
+    }
+
+    function renderToggleChips() {
+      for (const [key] of Object.entries(state.toggles)) {
+        const node = el(`${key}Chip`);
+        if (!node) continue;
+        node.classList.toggle('active', !!state.toggles[key]);
+      }
+    }
+
+    function wireToggles() {
+      document.querySelectorAll('[data-toggle]').forEach(node => {
+        node.addEventListener('click', () => {
+          const key = node.getAttribute('data-toggle');
+          state.toggles[key] = !state.toggles[key];
+          renderToggleChips();
+        });
+      });
+    }
+
+    function init() {
+      renderEntityTypeChips();
+      renderToggleChips();
+      renderGraphLegend();
+      renderAll();
+      wireToggles();
+      window.addEventListener('resize', () => renderGraphVisualization());
+
+      el('normalizeBtn').onclick = runNormalize;
+      el('structuredBtn').onclick = runStructured;
+      el('literatureBtn').onclick = runLiterature;
+      el('graphBtn').onclick = runGraph;
+      el('dossierBtn').onclick = runDossier;
+      el('presetDiseaseGeneBtn').onclick = applyPresetDiseaseGene;
+      el('presetPhenotypeBtn').onclick = applyPresetPhenotype;
+      el('clearWorkspaceBtn').onclick = clearWorkspace;
+      el('clearPrimaryBtn').onclick = () => {
+        state.primaryEntity = null;
+        state.primaryEntityKey = null;
+        renderAll();
+      };
+    }
+
+    init();
+  </script>
+</body>
+</html>
