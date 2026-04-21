@@ -1,41 +1,25 @@
-"""Broker service orchestrating normalization, search, joining, and ranking.
-
-The :class:`Broker` class coordinates calls to source connectors based on
-user intent.  It exposes high‑level methods corresponding to the tools
-specified in section 11 of the specification: `normalize_entities`,
-`search_literature`, `search_structured_evidence`,
-`assemble_evidence_graph`, and `generate_dossier`【800†L1-L14】.  Each
-method returns the appropriate Pydantic model so that FastAPI can
-perform automatic validation and serialization.
-
-In this minimal implementation, the broker executes connector calls
-sequentially and returns stubbed results.  Production versions should
-perform concurrent I/O (e.g. using ``asyncio.gather``), apply query
-planning based on expected entity types, and merge results via
-identifier crosswalks【200†L18-L25】.
-"""
+"""Broker service orchestrating normalization, search, joining, and ranking."""
 
 import asyncio
-from typing import Dict, List, Optional, Any, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
+from .connectors import CONNECTOR_REGISTRY, get_connector
 from .models import (
-    EntityType,
-    NormalizedEntity,
-    NormalizationResponse,
-    LiteratureResult,
-    StructuredEvidenceResult,
-    EvidenceGraph,
     Dossier,
+    EntityType,
+    EvidenceGraph,
+    LiteratureResult,
+    NormalizationResponse,
+    NormalizedEntity,
     PubMedSearchFilters,
+    StructuredEvidenceResult,
 )
-from .connectors import get_connector, CONNECTOR_REGISTRY
 
 
 class Broker:
     """Core orchestrator for the evidence retrieval platform."""
 
     def __init__(self) -> None:
-        # instantiate connectors lazily via registry
         self.connectors = CONNECTOR_REGISTRY
 
     async def normalize_entities(
@@ -100,6 +84,24 @@ class Broker:
             alternatives=alternative_candidates or None,
         )
 
+    async def normalize_gene(self, raw_gene: str) -> NormalizationResponse:
+        connector = get_connector("hgnc")
+        records = await connector.normalize(raw_gene)
+        entities = [NormalizedEntity.model_validate(record) for record in records]
+
+        return NormalizationResponse(
+            entities=entities[:1],
+            alternatives=entities[1:] or None,
+        )
+
+    async def crosswalk_gene_identifier(
+        self,
+        identifier: str,
+        namespace: str = "hgnc_id",
+    ) -> Dict[str, str]:
+        connector = get_connector("hgnc")
+        return await connector.crosswalk_ids(identifier, namespace=namespace)
+
     async def search_literature(
         self,
         disease_ids: Optional[List[str]] = None,
@@ -132,28 +134,18 @@ class Broker:
         requested_evidence_types: Optional[List[str]] = None,
         filters: Optional[Dict[str, Any]] = None,
     ) -> StructuredEvidenceResult:
-        """Retrieve non‑literature evidence from structured sources.
-
-        This stub uses the normalized entities to organize them by type
-        and returns them directly.  A full implementation would look up
-        related genes, variants, phenotypes, compounds, and trials
-        through each respective connector, apply crosswalks, and build
-        relationship objects【800†L1-L14】.
-        """
-        # Organize normalized entities by type
         by_type: Dict[EntityType, List[NormalizedEntity]] = {}
         for entity in normalized_bundle.entities:
             by_type.setdefault(entity.entity_type, []).append(entity)
 
-        result = StructuredEvidenceResult(
+        return StructuredEvidenceResult(
             genes=by_type.get(EntityType.gene),
             variants=by_type.get(EntityType.variant),
             phenotypes=by_type.get(EntityType.phenotype),
             compounds=by_type.get(EntityType.compound),
             trials=by_type.get(EntityType.trial),
-            relationships=[],  # relationships are not generated in stub
+            relationships=[],
         )
-        return result
 
     async def assemble_evidence_graph(
         self,
@@ -162,21 +154,13 @@ class Broker:
         structured_evidence_results: StructuredEvidenceResult,
         scoring_profile: Optional[str] = None,
     ) -> EvidenceGraph:
-        """Merge and score evidence across sources into an evidence graph.
-
-        The stub simply aggregates all normalized nodes from the
-        structured evidence result and attaches no edges or rankings.  A
-        production version would create nodes for articles, genes,
-        variants, etc., connect them via relationships, and compute
-        ranked summaries【800†L1-L14】.
-        """
         nodes: List[NormalizedEntity] = []
         nodes.extend(structured_evidence_results.genes or [])
         nodes.extend(structured_evidence_results.variants or [])
         nodes.extend(structured_evidence_results.phenotypes or [])
         nodes.extend(structured_evidence_results.compounds or [])
         nodes.extend(structured_evidence_results.trials or [])
-        # Add article nodes
+
         for art in literature_results:
             node = NormalizedEntity(
                 entity_type=EntityType.article,
@@ -188,13 +172,13 @@ class Broker:
                 provenance={"source": art.provenance.source},
             )
             nodes.append(node)
-        graph = EvidenceGraph(
+
+        return EvidenceGraph(
             nodes=nodes,
             edges=[],
             ranked_summaries=["Stub evidence graph with no edges"],
             explanation={"note": "No ranking applied in this stub"},
         )
-        return graph
 
     async def generate_dossier(
         self,
@@ -219,7 +203,10 @@ class Broker:
         )
 
         graph = await self.assemble_evidence_graph(
-            normalized_bundle, literature, structured, scoring_profile=output_profile
+            normalized_bundle,
+            literature,
+            structured,
+            scoring_profile=output_profile,
         )
 
         summary = [
