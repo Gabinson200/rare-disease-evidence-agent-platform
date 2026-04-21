@@ -1,17 +1,20 @@
-from fastapi import FastAPI
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
+from fastapi import FastAPI
+
+from .broker import Broker
 from .models import (
-    NormalizedEntity,
-    NormalizationResponse,
-    NormalizeRequest,
+    Dossier,
+    EvidenceGraph,
+    GeneCrosswalkRequest,
+    GeneLookupRequest,
     LiteratureResult,
     LiteratureSearchRequest,
+    NormalizationResponse,
+    NormalizedEntity,
+    NormalizeRequest,
     StructuredEvidenceResult,
-    EvidenceGraph,
-    Dossier,
 )
-from .broker import Broker
 
 app = FastAPI(
     title="Rare Disease Evidence Retrieval Platform",
@@ -36,6 +39,19 @@ async def normalize_entities(request: NormalizeRequest) -> NormalizationResponse
         raw_query=request.raw_query,
         expected_entity_types=request.expected_entity_types,
         disambiguation_preferences=request.disambiguation_preferences,
+    )
+
+
+@app.post("/normalize/gene", response_model=NormalizationResponse)
+async def normalize_gene(request: GeneLookupRequest) -> NormalizationResponse:
+    return await broker.normalize_gene(raw_gene=request.raw_gene)
+
+
+@app.post("/genes/crosswalk", response_model=Dict[str, str])
+async def crosswalk_gene_identifier(request: GeneCrosswalkRequest) -> Dict[str, str]:
+    return await broker.crosswalk_gene_identifier(
+        identifier=request.identifier,
+        namespace=request.namespace,
     )
 
 
