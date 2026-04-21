@@ -645,30 +645,393 @@ class Broker:
         structured_evidence_results: StructuredEvidenceResult,
         scoring_profile: Optional[str] = None,
     ) -> EvidenceGraph:
-        nodes: List[NormalizedEntity] = []
-        nodes.extend(structured_evidence_results.genes or [])
-        nodes.extend(structured_evidence_results.variants or [])
-        nodes.extend(structured_evidence_results.phenotypes or [])
-        nodes.extend(structured_evidence_results.compounds or [])
-        nodes.extend(structured_evidence_results.trials or [])
+        import re
+        from collections import Counter
 
-        for art in literature_results:
-            node = NormalizedEntity(
+        profile = (scoring_profile or "default").lower()
+        mention_threshold = {
+            "precision": 0.80,
+            "sensitive": 0.55,
+            "default": 0.65,
+        }.get(profile, 0.65)
+
+        def entity_key(entity: NormalizedEntity) -> str:
+            for key in (
+                "orpha",
+                "mondo",
+                "medgen",
+                "medgen_uid",
+                "mesh",
+                "hpo",
+                "hgnc",
+                "entrez",
+                "clinvar",
+                "vcv",
+                "rcv",
+                "scv",
+                "dbsnp",
+                "pubchem",
+                "inchikey",
+                "smiles",
+                "nct",
+                "pmid",
+                "pmcid",
+                "doi",
+            ):
+                value = (entity.source_ids or {}).get(key)
+                if value:
+                    return f"{entity.entity_type}:{key}:{value}"
+            return f"{entity.entity_type}:label:{entity.preferred_label.strip().lower()}"
+
+        def article_to_node(article: LiteratureResult) -> NormalizedEntity:
+            source_ids: Dict[str, str] = {}
+            if article.pmid:
+                source_ids["pmid"] = article.pmid
+            if article.pmcid:
+                source_ids["pmcid"] = article.pmcid
+            if article.doi:
+                source_ids["doi"] = article.doi
+
+            provenance: Dict[str, Any]
+            if hasattr(article.provenance, "model_dump"):
+                provenance = article.provenance.model_dump()
+            else:
+                provenance = {"source": getattr(article.provenance, "source", "unknown")}
+
+            return NormalizedEntity(
                 entity_type=EntityType.article,
-                preferred_label=art.title,
-                source_ids={"pmid": art.pmid or ""},
+                preferred_label=article.title,
+                source_ids=source_ids,
                 synonyms=[],
-                description=art.abstract,
-                confidence=art.score,
-                provenance={"source": art.provenance.source},
+                description=article.abstract,
+                confidence=article.score,
+                provenance=provenance,
             )
-            nodes.append(node)
+
+        def add_node(node_map: Dict[str, NormalizedEntity], entity: NormalizedEntity) -> str:
+            key = entity_key(entity)
+            if key not in node_map:
+                node_map[key] = entity
+            else:
+                existing = node_map[key]
+                merged_source_ids = dict(existing.source_ids or {})
+                merged_source_ids.update(entity.source_ids or {})
+
+                merged_synonyms: List[str] = []
+                seen = set()
+                for value in list(existing.synonyms or []) + list(entity.synonyms or []):
+                    cleaned = value.strip()
+                    lowered = cleaned.lower()
+                    if cleaned and lowered not in seen:
+                        seen.add(lowered)
+                        merged_synonyms.append(cleaned)
+
+                merged_provenance = dict(existing.provenance or {})
+                merged_provenance.update(entity.provenance or {})
+
+                node_map[key] = NormalizedEntity(
+                    entity_type=existing.entity_type,
+                    preferred_label=existing.preferred_label or entity.preferred_label,
+                    source_ids=merged_source_ids,
+                    synonyms=merged_synonyms,
+                    description=existing.description or entity.description,
+                    confidence=max(existing.confidence, entity.confidence),
+                    provenance=merged_provenance,
+                )
+            return key
+
+        def add_edge(
+            edge_list: List[Dict[str, Any]],
+            *,
+            edge_type: str,
+            source: str,
+            confidence: float,
+            subject_key: str,
+            object_key: str,
+            directionality: str,
+            provenance: Optional[Dict[str, Any]] = None,
+        ) -> None:
+            edge_list.append(
+                {
+                    "edge_type": edge_type,
+                    "source": source,
+                    "confidence": round(float(confidence), 4),
+                    "subject_key": subject_key,
+                    "object_key": object_key,
+                    "directionality": directionality,
+                    "provenance": provenance or {},
+                }
+            )
+
+        def collect_candidate_terms(entity: NormalizedEntity, max_terms: int = 5) -> List[str]:
+            raw_terms = [entity.preferred_label] + list(entity.synonyms or [])
+            out: List[str] = []
+            seen = set()
+
+            for term in raw_terms:
+                cleaned = term.strip()
+                lowered = cleaned.lower()
+                if not cleaned or lowered in seen:
+                    continue
+
+                # Avoid very short ambiguous non-gene/non-variant tokens.
+                if entity.entity_type not in {EntityType.gene, EntityType.variant}:
+                    if len(cleaned) < 4 and " " not in cleaned:
+                        continue
+
+                seen.add(lowered)
+                out.append(cleaned)
+
+                if len(out) >= max_terms:
+                    break
+
+            return out
+
+        def match_entity_in_article(
+            entity: NormalizedEntity,
+            article: LiteratureResult,
+        ) -> tuple[float, Optional[str], Optional[str]]:
+            title = article.title or ""
+            abstract = article.abstract or ""
+            title_lower = title.lower()
+            abstract_lower = abstract.lower()
+            full_text = f"{title} {abstract}"
+            full_text_lower = full_text.lower()
+
+            best_score = 0.0
+            best_term: Optional[str] = None
+            best_location: Optional[str] = None
+
+            candidate_terms = collect_candidate_terms(entity)
+
+            for idx, term in enumerate(candidate_terms):
+                is_preferred = idx == 0
+                term_lower = term.lower()
+
+                score_title = 0.0
+                score_abstract = 0.0
+
+                if entity.entity_type == EntityType.gene:
+                    if len(term) < 3:
+                        continue
+                    pattern = re.compile(rf"(?<![A-Za-z0-9]){re.escape(term)}(?![A-Za-z0-9])", re.IGNORECASE)
+                    if pattern.search(title):
+                        score_title = 0.94 if is_preferred else 0.84
+                    if pattern.search(abstract):
+                        score_abstract = 0.76 if is_preferred else 0.66
+
+                elif entity.entity_type == EntityType.variant:
+                    if len(term) < 4:
+                        continue
+                    if term_lower in title_lower:
+                        score_title = 0.92 if is_preferred else 0.82
+                    if term_lower in abstract_lower:
+                        score_abstract = 0.74 if is_preferred else 0.64
+
+                else:
+                    if term_lower in title_lower:
+                        score_title = 0.88 if is_preferred else 0.78
+                    if term_lower in abstract_lower:
+                        score_abstract = 0.68 if is_preferred else 0.58
+
+                score = max(score_title, score_abstract)
+                if score > best_score:
+                    best_score = score
+                    best_term = term
+                    best_location = "title" if score_title >= score_abstract and score_title > 0 else (
+                        "abstract" if score_abstract > 0 else None
+                    )
+
+            return best_score, best_term, best_location
+
+        # ------------------------------------------------------------------
+        # Build node map from normalized input + structured evidence + articles
+        # ------------------------------------------------------------------
+        node_map: Dict[str, NormalizedEntity] = {}
+
+        for entity in normalized_bundle.entities:
+            add_node(node_map, entity)
+
+        for entity_group in (
+            structured_evidence_results.diseases or [],
+            structured_evidence_results.genes or [],
+            structured_evidence_results.variants or [],
+            structured_evidence_results.phenotypes or [],
+            structured_evidence_results.compounds or [],
+            structured_evidence_results.trials or [],
+        ):
+            for entity in entity_group:
+                add_node(node_map, entity)
+
+        article_nodes: List[NormalizedEntity] = []
+        for article in literature_results:
+            article_node = article_to_node(article)
+            article_nodes.append(article_node)
+            add_node(node_map, article_node)
+
+        # ------------------------------------------------------------------
+        # Structured relationship edges
+        # ------------------------------------------------------------------
+        edges: List[Dict[str, Any]] = []
+        structured_edge_count = 0
+        literature_edge_count = 0
+
+        for raw_rel in (structured_evidence_results.relationships or []):
+            try:
+                subject = NormalizedEntity.model_validate(raw_rel["subject"])
+                object_ = NormalizedEntity.model_validate(raw_rel["object"])
+            except Exception:
+                continue
+
+            subject_key = add_node(node_map, subject)
+            object_key = add_node(node_map, object_)
+
+            add_edge(
+                edges,
+                edge_type=str(raw_rel.get("relationship_type", "related_to")),
+                source=str(raw_rel.get("source", "structured")),
+                confidence=float(raw_rel.get("confidence", 0.5)),
+                subject_key=subject_key,
+                object_key=object_key,
+                directionality=str(raw_rel.get("directionality", "directed")),
+                provenance=raw_rel.get("provenance") or {},
+            )
+            structured_edge_count += 1
+
+        # ------------------------------------------------------------------
+        # Article -> entity mention edges
+        # ------------------------------------------------------------------
+        non_article_nodes = [
+            entity
+            for entity in node_map.values()
+            if entity.entity_type != EntityType.article
+        ]
+
+        article_entity_matches: Dict[str, Dict[str, float]] = {}
+
+        for article, article_node in zip(literature_results, article_nodes):
+            article_key = entity_key(article_node)
+            article_entity_matches[article_key] = {}
+
+            for entity in non_article_nodes:
+                entity_key_value = entity_key(entity)
+                score, matched_term, matched_location = match_entity_in_article(entity, article)
+
+                if score < mention_threshold:
+                    continue
+
+                article_entity_matches[article_key][entity_key_value] = score
+
+                add_edge(
+                    edges,
+                    edge_type="article_mentions_entity",
+                    source=str(getattr(article.provenance, "source", "literature")),
+                    confidence=score,
+                    subject_key=article_key,
+                    object_key=entity_key_value,
+                    directionality="article_to_entity",
+                    provenance={
+                        "matched_term": matched_term,
+                        "matched_location": matched_location,
+                        "pmid": article.pmid,
+                        "doi": article.doi,
+                    },
+                )
+                literature_edge_count += 1
+
+        # ------------------------------------------------------------------
+        # Optional article -> relationship support edges
+        # If an article mentions both endpoints of a structured relationship,
+        # add a light support edge between the article and the object endpoint.
+        # ------------------------------------------------------------------
+        for edge in list(edges):
+            if edge.get("edge_type") == "article_mentions_entity":
+                continue
+
+            subject_key = edge["subject_key"]
+            object_key = edge["object_key"]
+
+            for article_key, match_map in article_entity_matches.items():
+                subject_score = match_map.get(subject_key)
+                object_score = match_map.get(object_key)
+                if subject_score is None or object_score is None:
+                    continue
+
+                support_confidence = min(subject_score, object_score)
+                add_edge(
+                    edges,
+                    edge_type="article_supports_relationship_candidate",
+                    source="derived",
+                    confidence=support_confidence,
+                    subject_key=article_key,
+                    object_key=object_key,
+                    directionality="article_to_entity",
+                    provenance={
+                        "supports_edge_type": edge["edge_type"],
+                        "subject_key": subject_key,
+                        "object_key": object_key,
+                    },
+                )
+                literature_edge_count += 1
+
+        # ------------------------------------------------------------------
+        # Graph summaries / explanation
+        # ------------------------------------------------------------------
+        nodes = list(node_map.values())
+
+        node_counts = Counter(node.entity_type.value for node in nodes)
+        edge_counts = Counter(edge["edge_type"] for edge in edges)
+
+        top_entities = sorted(
+            [node for node in nodes if node.entity_type != EntityType.article],
+            key=lambda x: x.confidence,
+            reverse=True,
+        )[:5]
+
+        ranked_summaries = [
+            f"Graph contains {len(nodes)} unique nodes and {len(edges)} edges.",
+            (
+                "Node counts — "
+                f"diseases: {node_counts.get('disease', 0)}, "
+                f"genes: {node_counts.get('gene', 0)}, "
+                f"variants: {node_counts.get('variant', 0)}, "
+                f"phenotypes: {node_counts.get('phenotype', 0)}, "
+                f"compounds: {node_counts.get('compound', 0)}, "
+                f"trials: {node_counts.get('trial', 0)}, "
+                f"articles: {node_counts.get('article', 0)}."
+            ),
+            (
+                "Edge counts — "
+                f"structured: {structured_edge_count}, "
+                f"literature-derived: {literature_edge_count}."
+            ),
+        ]
+
+        if top_entities:
+            ranked_summaries.append(
+                "Top high-confidence entities: "
+                + ", ".join(f"{entity.preferred_label} ({entity.entity_type})" for entity in top_entities)
+            )
+
+        explanation = {
+            "scoring_profile": profile,
+            "mention_threshold": mention_threshold,
+            "node_counts_by_type": dict(node_counts),
+            "edge_counts_by_type": dict(edge_counts),
+            "structured_edge_count": structured_edge_count,
+            "literature_edge_count": literature_edge_count,
+            "notes": [
+                "Structured edges come directly from search_structured_evidence().",
+                "Literature edges are heuristic mention links from title/abstract matching.",
+                "article_supports_relationship_candidate edges are inferred when an article mentions both endpoints of a structured relationship.",
+            ],
+        }
 
         return EvidenceGraph(
             nodes=nodes,
-            edges=[],
-            ranked_summaries=["Stub evidence graph with no edges"],
-            explanation={"note": "No ranking applied in this stub"},
+            edges=edges,
+            ranked_summaries=ranked_summaries,
+            explanation=explanation,
         )
 
     async def generate_dossier(
