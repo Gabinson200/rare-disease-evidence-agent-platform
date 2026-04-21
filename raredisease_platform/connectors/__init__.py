@@ -2,13 +2,13 @@
 
 Each connector implements a common interface consisting of methods such as
 ``search()``, ``fetch_by_id()``, ``normalize()``, and ``crosswalk()`` as
-outlined in the specification's connector design (see section 13)【600†L1-L16】.
+outlined in the specification's connector design (see section 13).
 Connectors translate normalized queries into API requests, parse
 responses into internal records, and annotate results with provenance.
 
 This module exposes a registry of available connectors and convenience
-functions for accessing them by name.  Concrete connectors live in
-submodules like :mod:`raredisease_platform.connectors.pubmed`.  When
+functions for accessing them by name. Concrete connectors live in
+submodules like :mod:`raredisease_platform.connectors.pubmed`. When
 adding a new source, create a corresponding module and register it
 below.
 """
@@ -16,18 +16,20 @@ below.
 from typing import Dict
 
 from .base import BaseConnector
-from .pubmed import PubMedConnector
-from .orphadata import OrphadataConnector
+from .clinvar import ClinVarConnector
+from .europepmc import EuropePMCConnector
 from .hgnc import HGNCConnector
 from .hpo import HPOConnector
-from .clinvar import ClinVarConnector
+from .orphadata import OrphadataConnector
 from .pubchem import PubChemConnector
+from .pubmed import PubMedConnector
 from .trials import ClinicalTrialsConnector
 
 
-#: Registry of available connectors keyed by human‑readable name.
+#: Registry of available connectors keyed by human-readable name.
 CONNECTOR_REGISTRY: Dict[str, BaseConnector] = {
     "pubmed": PubMedConnector(),
+    "europepmc": EuropePMCConnector(),
     "orphadata": OrphadataConnector(),
     "hgnc": HGNCConnector(),
     "hpo": HPOConnector(),
