@@ -3,7 +3,7 @@ import logging
 import os
 import re
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import httpx
 
@@ -63,6 +63,104 @@ class PubMedConnector(BaseConnector):
             return [languages]
         return list(languages)
 
+    @staticmethod
+    def _coerce_string_list(value: Any) -> List[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, list):
+            return [str(item) for item in value if item is not None]
+        return [str(value)]
+
+    @staticmethod
+    def _unique_preserve_order(items: Iterable[str]) -> List[str]:
+        seen = set()
+        ordered: List[str] = []
+        for item in items:
+            cleaned = str(item).strip()
+            if not cleaned:
+                continue
+            key = cleaned.lower()
+            if key not in seen:
+                seen.add(key)
+                ordered.append(cleaned)
+        return ordered
+
+    @staticmethod
+    def _quote_term(term: str) -> str:
+        escaped = term.replace("\\", "\\\\").replace('"', '\\"').strip()
+        return f'"{escaped}"'
+
+    def _term_group(
+        self,
+        terms: List[str],
+        fields: List[str],
+        *,
+        limit: int = 8,
+    ) -> Optional[str]:
+        clauses: List[str] = []
+        for term in self._unique_preserve_order(terms)[:limit]:
+            quoted = self._quote_term(term)
+            for field in fields:
+                clauses.append(f"{quoted}[{field}]")
+
+        clauses = self._unique_preserve_order(clauses)
+        if not clauses:
+            return None
+        if len(clauses) == 1:
+            return clauses[0]
+        return "(" + " OR ".join(clauses) + ")"
+
+    def _build_normalized_entity_clauses(self, query: Dict[str, Any]) -> List[str]:
+        """Build PubMed clauses from broker-provided normalized entity terms.
+
+        These terms are derived from canonical entities by the broker. Each entity
+        type becomes its own OR group, and groups are ANDed together by the main
+        query builder. This keeps PubMed from falling back to broad keyword-only
+        searches when normalized disease/gene/phenotype/compound terms exist.
+        """
+        clauses: List[str] = []
+
+        disease_terms = self._coerce_string_list(query.get("disease_terms"))
+        gene_terms = self._coerce_string_list(query.get("gene_terms"))
+        phenotype_terms = self._coerce_string_list(query.get("phenotype_terms"))
+        compound_terms = self._coerce_string_list(query.get("compound_terms"))
+
+        disease_group = self._term_group(
+            disease_terms,
+            ["Title/Abstract", "MeSH Terms"],
+            limit=8,
+        )
+        if disease_group:
+            clauses.append(disease_group)
+
+        gene_group = self._term_group(
+            gene_terms,
+            ["Title/Abstract"],
+            limit=6,
+        )
+        if gene_group:
+            clauses.append(gene_group)
+
+        phenotype_group = self._term_group(
+            phenotype_terms,
+            ["Title/Abstract", "MeSH Terms"],
+            limit=6,
+        )
+        if phenotype_group:
+            clauses.append(phenotype_group)
+
+        compound_group = self._term_group(
+            compound_terms,
+            ["Title/Abstract", "MeSH Terms", "Substance Name"],
+            limit=6,
+        )
+        if compound_group:
+            clauses.append(compound_group)
+
+        return clauses
+
     async def _request_eutils(
         self,
         client: httpx.AsyncClient,
@@ -89,8 +187,9 @@ class PubMedConnector(BaseConnector):
         }
 
         term_parts: List[str] = []
-        keywords = (query.get("keywords") or "").strip()
+        term_parts.extend(self._build_normalized_entity_clauses(query))
 
+        keywords = (query.get("keywords") or "").strip()
         if keywords:
             if filters.get("title_only"):
                 term_parts.append(f"({keywords})[Title]")
@@ -343,7 +442,6 @@ class PubMedConnector(BaseConnector):
                 if article_id.get("idtype") == "doi":
                     doi = article_id.get("value")
                     break
-
             pmcid = self._extract_pmcid(article_ids)
             abstract = abstracts_by_pmid.get(pmid)
             year = self._parse_year(record.get("pubdate"))
@@ -380,13 +478,12 @@ class PubMedConnector(BaseConnector):
                 provenance=LiteratureProvenance(
                     source=self.name,
                     retrieved_at=now,
-                    raw_record=record,
+                    raw_record={
+                        "esummary": record,
+                        "esearch_term": term,
+                    },
                 ),
             )
             results.append(result)
 
-        results.sort(key=lambda x: x.score, reverse=True)
         return results
-    
-    async def normalize(self, text: str) -> List[Dict[str, Any]]:
-        return []
