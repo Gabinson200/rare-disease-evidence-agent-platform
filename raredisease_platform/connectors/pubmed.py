@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import xml.etree.ElementTree as ET
+import asyncio
 from typing import Any, Dict, List, Iterable, Optional
 
 import httpx
@@ -35,7 +36,16 @@ class PubMedConnector(BaseConnector):
         self.tool = os.getenv("NCBI_TOOL", "rare-disease-evidence-platform")
         self.email = os.getenv("NCBI_EMAIL")
         self.api_key = os.getenv("NCBI_API_KEY")
-
+        self._eutils_lock = asyncio.Lock()
+        self._last_eutils_request_at = 0.0
+        self.min_request_interval_seconds = float(
+            os.getenv(
+                "NCBI_MIN_REQUEST_INTERVAL_SECONDS",
+                "0.12" if self.api_key else "0.40",
+            )
+        )
+        self.max_retries = int(os.getenv("NCBI_MAX_RETRIES", "4"))
+        
     def _base_params(self) -> Dict[str, str]:
         params = {
             "db": "pubmed",
@@ -269,13 +279,66 @@ class PubMedConnector(BaseConnector):
         params: Dict[str, Any],
         *,
         use_post: bool = False,
-        ) -> httpx.Response:
-            if use_post:
-                response = await client.post(url, data=params)
-            else:
-                response = await client.get(url, params=params)
+    ) -> httpx.Response:
+        """
+        Rate-limit and retry NCBI EUtils requests.
+
+        NCBI can return 429 when repeated CLI/agent runs call ESearch,
+        ESummary, and EFetch in quick succession. This keeps the broker from
+        failing abstract retrieval immediately.
+        """
+        last_error: Optional[Exception] = None
+
+        for attempt in range(self.max_retries + 1):
+            async with self._eutils_lock:
+                now = asyncio.get_running_loop().time()
+                elapsed = now - self._last_eutils_request_at
+                sleep_for = self.min_request_interval_seconds - elapsed
+
+                if sleep_for > 0:
+                    await asyncio.sleep(sleep_for)
+
+                if use_post:
+                    response = await client.post(url, data=params)
+                else:
+                    response = await client.get(url, params=params)
+
+                self._last_eutils_request_at = asyncio.get_running_loop().time()
+
+            if response.status_code == 429 or 500 <= response.status_code < 600:
+                retry_after = response.headers.get("Retry-After")
+                if retry_after:
+                    try:
+                        delay = float(retry_after)
+                    except ValueError:
+                        delay = min(2.0 * (attempt + 1), 10.0)
+                else:
+                    delay = min(1.5 * (2 ** attempt), 12.0)
+
+                last_error = httpx.HTTPStatusError(
+                    message=f"EUtils request failed with status {response.status_code}",
+                    request=response.request,
+                    response=response,
+                )
+
+                if attempt < self.max_retries:
+                    logger.warning(
+                        "EUtils request to %s returned %s; retrying in %.2fs "
+                        "(attempt %s/%s)",
+                        url,
+                        response.status_code,
+                        delay,
+                        attempt + 1,
+                        self.max_retries,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+
             response.raise_for_status()
             return response
+
+        assert last_error is not None
+        raise last_error
 
     def _build_esearch_params(self, query: Dict[str, Any]) -> Dict[str, Any]:
         filters = query.get("filters") or {}

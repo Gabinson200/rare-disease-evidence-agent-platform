@@ -1,0 +1,65 @@
+{
+  "tools": [
+    {
+      "name": "evidence_query",
+      "description": "Run the rare disease evidence broker workflow: normalize entities, search literature, optionally retrieve structured evidence, assemble an evidence graph, and return traceable results.",
+      "module": "raredisease_platform.agent.openclaw_tools",
+      "function": "evidence_query",
+      "async": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "raw_query": {
+            "type": "string",
+            "description": "Biomedical query or entity-bearing text to normalize and search."
+          },
+          "expected_entity_types": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "string",
+              "enum": ["disease", "gene", "variant", "phenotype", "compound", "trial"]
+            },
+            "description": "Optional expected entity types."
+          },
+          "literature_keywords": {
+            "type": ["string", "null"],
+            "description": "Non-entity literature intent terms such as case report, review, clinical trial, mechanism, or rare disease."
+          },
+          "literature_filters": {
+            "type": ["object", "null"],
+            "description": "Optional literature filters.",
+            "properties": {
+              "case_reports_only": { "type": "boolean" },
+              "reviews_only": { "type": "boolean" },
+              "trials_only": { "type": "boolean" },
+              "exact_disease_required": { "type": "boolean" },
+              "exact_gene_required": { "type": "boolean" },
+              "exact_phenotype_required": { "type": "boolean" },
+              "exact_compound_required": { "type": "boolean" },
+              "retmax": { "type": "integer", "minimum": 1, "maximum": 20 }
+            }
+          },
+          "include_structured_evidence": {
+            "type": "boolean",
+            "description": "Whether to retrieve structured evidence. Defaults to false in fast mode."
+          },
+          "requested_evidence_types": {
+            "type": ["array", "null"],
+            "items": { "type": "string" },
+            "description": "Optional evidence types such as genes, diseases, variants, phenotypes, compounds, trials, relationships."
+          },
+          "deep_search": {
+            "type": "boolean",
+            "description": "Set true for slower but more complete retrieval."
+          },
+          "broker_base_url": {
+            "type": "string",
+            "description": "Broker server URL.",
+            "default": "http://127.0.0.1:8000"
+          }
+        },
+        "required": ["raw_query"]
+      }
+    }
+  ]
+}

@@ -158,7 +158,7 @@ class EvidenceResponseFormatter:
 
         if steps:
             step_names = [step.get("step", "unknown") for step in steps]
-            lines.append("Pipeline steps: " + " → ".join(step_names) + ".")
+            lines.append("Pipeline steps: " + " -> ".join(step_names) + ".")
 
         normalization_trace = normalized_bundle.get("normalization_trace", {}) or {}
         connector_calls = normalization_trace.get("connector_calls", []) or []

@@ -1,8 +1,8 @@
-"""Tool functions intended for OpenClaw/MCP-style integration.
+"""OpenClaw-facing tool functions for the rare disease evidence platform.
 
-The first exposed agent tool should be evidence_query. It wraps the broker's
-/evidence/query endpoint and keeps the LLM from directly querying raw biomedical
-sources.
+The primary exposed tool should be evidence_query. It wraps the broker's
+/evidence/query endpoint and prevents the agent from directly querying raw
+biomedical sources.
 """
 
 from __future__ import annotations
@@ -25,13 +25,16 @@ async def evidence_query(
     broker_base_url: str = "http://127.0.0.1:8000",
     timeout_seconds: float = 180.0,
 ) -> Dict[str, Any]:
-    """Run the full broker evidence workflow.
+    """Run the broker's high-level evidence workflow.
 
-    Default mode is fast and interactive:
+    Fast default:
     - include_structured_evidence = False
     - retmax <= 3
 
-    Set deep_search=True for a slower, more complete evidence pass.
+    Deep mode:
+    - deep_search = True
+    - include_structured_evidence = True
+    - retmax defaults to 10 unless caller supplies another value
     """
     filters = dict(literature_filters or {})
 
