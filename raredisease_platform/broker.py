@@ -1,6 +1,7 @@
 """Broker service orchestrating normalization, search, joining, and ranking."""
 
 import asyncio
+import re
 from typing import Any, Dict, List, Optional, Sequence
 
 from .connectors import CONNECTOR_REGISTRY, get_connector
@@ -19,8 +20,413 @@ from .models import (
 class Broker:
     """Core orchestrator for the evidence retrieval platform."""
 
+    NORMALIZATION_FINAL_THRESHOLD = 0.90
+    NORMALIZATION_ALTERNATIVE_THRESHOLD = 0.65
+
+    CONNECTORS_BY_ENTITY_TYPE = {
+        EntityType.disease: ["orphadata"],
+        EntityType.gene: ["hgnc"],
+        EntityType.phenotype: ["hpo"],
+        EntityType.variant: ["clinvar"],
+        EntityType.compound: ["pubchem"],
+        EntityType.trial: ["clinicaltrials"],
+    }
+
+    COMMON_NON_GENE_TOKENS = {
+        "AND",
+        "OR",
+        "THE",
+        "FOR",
+        "WITH",
+        "CASE",
+        "CASES",
+        "REPORT",
+        "REPORTS",
+        "RARE",
+        "DISEASE",
+        "DISEASES",
+        "GENE",
+        "GENES",
+        "VARIANT",
+        "VARIANTS",
+        "DRUG",
+        "DRUGS",
+        "TRIAL",
+        "TRIALS",
+        "REVIEW",
+        "REVIEWS",
+        "RECENT",
+        "FIND",
+        "SHOW",
+        "ME",
+        "IN",
+        "OF",
+        "ON",
+        "TO",
+        "BY",
+        "FROM",
+        "INVOLVING",
+        "ASSOCIATED",
+    }
+
     def __init__(self) -> None:
         self.connectors = CONNECTOR_REGISTRY
+
+    def _unique_preserve_order(self, items: Sequence[str]) -> List[str]:
+        seen = set()
+        out: List[str] = []
+        for item in items:
+            cleaned = str(item).strip()
+            if not cleaned:
+                continue
+            key = cleaned.lower()
+            if key not in seen:
+                seen.add(key)
+                out.append(cleaned)
+        return out
+
+    def _expected_type_set(
+        self,
+        expected_entity_types: Optional[List[EntityType]],
+    ) -> Optional[set[EntityType]]:
+        if not expected_entity_types:
+            return None
+        return set(expected_entity_types)
+
+    def _make_candidate(
+        self,
+        *,
+        surface_text: str,
+        entity_types: List[EntityType],
+        start: int,
+        end: int,
+        strategy: str,
+    ) -> Dict[str, Any]:
+        return {
+            "surface_text": surface_text.strip(),
+            "entity_types": entity_types,
+            "start": start,
+            "end": end,
+            "strategy": strategy,
+        }
+
+    def _add_regex_candidates(
+        self,
+        candidates: List[Dict[str, Any]],
+        raw_query: str,
+        pattern: str,
+        entity_types: List[EntityType],
+        strategy: str,
+        *,
+        flags: int = re.IGNORECASE,
+    ) -> None:
+        for match in re.finditer(pattern, raw_query, flags):
+            candidates.append(
+                self._make_candidate(
+                    surface_text=match.group(0),
+                    entity_types=entity_types,
+                    start=match.start(),
+                    end=match.end(),
+                    strategy=strategy,
+                )
+            )
+
+    def _detect_candidate_spans(
+        self,
+        raw_query: str,
+        expected_entity_types: Optional[List[EntityType]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Lightweight candidate-span detection.
+
+        This avoids sending the entire raw query to every connector.
+        It detects stable IDs and obvious biomedical spans, then routes
+        only plausible spans to the relevant source normalizers.
+        """
+        text = raw_query.strip()
+        if not text:
+            return []
+
+        expected = self._expected_type_set(expected_entity_types)
+        candidates: List[Dict[str, Any]] = []
+
+        def allowed(entity_type: EntityType) -> bool:
+            return expected is None or entity_type in expected
+
+        # Stable identifier spans.
+        if allowed(EntityType.disease):
+            self._add_regex_candidates(
+                candidates,
+                text,
+                r"\bORPHA[:_ ]?\d+\b",
+                [EntityType.disease],
+                "orpha_id",
+            )
+            self._add_regex_candidates(
+                candidates,
+                text,
+                r"\bMONDO[:_]\d+\b",
+                [EntityType.disease],
+                "mondo_id",
+            )
+
+        if allowed(EntityType.phenotype):
+            self._add_regex_candidates(
+                candidates,
+                text,
+                r"\bHP:\d{7}\b",
+                [EntityType.phenotype],
+                "hpo_id",
+            )
+
+        if allowed(EntityType.gene):
+            self._add_regex_candidates(
+                candidates,
+                text,
+                r"\bHGNC:\d+\b",
+                [EntityType.gene],
+                "hgnc_id",
+            )
+            self._add_regex_candidates(
+                candidates,
+                text,
+                r"\bENSG\d{8,}\b",
+                [EntityType.gene],
+                "ensembl_gene_id",
+            )
+
+        if allowed(EntityType.trial):
+            self._add_regex_candidates(
+                candidates,
+                text,
+                r"\bNCT\d{8}\b",
+                [EntityType.trial],
+                "nct_id",
+            )
+
+        if allowed(EntityType.variant):
+            self._add_regex_candidates(
+                candidates,
+                text,
+                r"\b(?:VCV|RCV|SCV)\d{9}(?:\.\d+)?\b",
+                [EntityType.variant],
+                "clinvar_accession",
+            )
+            self._add_regex_candidates(
+                candidates,
+                text,
+                r"\brs\d+\b",
+                [EntityType.variant],
+                "dbsnp_rsid",
+            )
+            self._add_regex_candidates(
+                candidates,
+                text,
+                r"\b(?:c|g|m|n|p|r)\.[A-Za-z0-9_>*?+\-delinsdup]+\b",
+                [EntityType.variant],
+                "hgvs_like",
+                flags=re.IGNORECASE,
+            )
+
+        if allowed(EntityType.compound):
+            self._add_regex_candidates(
+                candidates,
+                text,
+                r"\b[A-Z]{14}-[A-Z]{10}-[A-Z]\b",
+                [EntityType.compound],
+                "inchikey",
+                flags=0,
+            )
+
+        occupied_ranges = [(c["start"], c["end"]) for c in candidates]
+
+        def overlaps_existing(start: int, end: int) -> bool:
+            return any(start < e and end > s for s, e in occupied_ranges)
+
+        # Gene-like symbols: ACVR1, CFTR, TP53, LMNB1.
+        if allowed(EntityType.gene):
+            for match in re.finditer(r"\b[A-Z][A-Z0-9-]{1,10}\b", text):
+                token = match.group(0)
+                if token in self.COMMON_NON_GENE_TOKENS:
+                    continue
+                if overlaps_existing(match.start(), match.end()):
+                    continue
+
+                candidates.append(
+                    self._make_candidate(
+                        surface_text=token,
+                        entity_types=[EntityType.gene],
+                        start=match.start(),
+                        end=match.end(),
+                        strategy="gene_symbol_like",
+                    )
+                )
+                occupied_ranges.append((match.start(), match.end()))
+
+        # Compound context windows: "treated with X", "drug X", "compound X".
+        if allowed(EntityType.compound):
+            compound_context_re = re.compile(
+                r"\b(?:drug|compound|intervention|treatment|therapy|treated with|using)\s+"
+                r"([A-Za-z][A-Za-z0-9+\- ]{1,60})",
+                re.IGNORECASE,
+            )
+            for match in compound_context_re.finditer(text):
+                surface = match.group(1).strip(" .,;:")
+                if not surface:
+                    continue
+                start = match.start(1)
+                end = match.end(1)
+                if overlaps_existing(start, end):
+                    continue
+
+                candidates.append(
+                    self._make_candidate(
+                        surface_text=surface,
+                        entity_types=[EntityType.compound],
+                        start=start,
+                        end=end,
+                        strategy="compound_context_phrase",
+                    )
+                )
+                occupied_ranges.append((start, end))
+
+        # Disease / phenotype phrase fallback.
+        # This is intentionally much narrower than old raw-query-to-all-connectors behavior.
+        if allowed(EntityType.disease) or allowed(EntityType.phenotype):
+            residual = text
+
+            for candidate in candidates:
+                surface = re.escape(candidate["surface_text"])
+                residual = re.sub(surface, " ", residual, flags=re.IGNORECASE)
+
+            residual = re.sub(
+                r"\b("
+                r"find|show|me|recent|case|cases|report|reports|literature|article|articles|"
+                r"study|studies|for|about|on|involving|associated|with|and|or|the|a|an|"
+                r"gene|genes|variant|variants|compound|drug|trial|trials|rare|disease|diseases"
+                r")\b",
+                " ",
+                residual,
+                flags=re.IGNORECASE,
+            )
+
+            phrase = re.sub(r"\s+", " ", residual).strip(" .,;:")
+            words = phrase.split()
+
+            if 2 <= len(words) <= 8:
+                phrase_types: List[EntityType] = []
+
+                if allowed(EntityType.disease):
+                    phrase_types.append(EntityType.disease)
+
+                # Only route phrase to HPO automatically when expected or symptom-ish.
+                symptomish = any(
+                    w.lower() in {"pain", "seizures", "delay", "weakness", "ossification", "short", "stature"}
+                    for w in words
+                )
+                if allowed(EntityType.phenotype) and (expected is not None or symptomish):
+                    phrase_types.append(EntityType.phenotype)
+
+                if phrase_types:
+                    candidates.append(
+                        self._make_candidate(
+                            surface_text=phrase,
+                            entity_types=phrase_types,
+                            start=max(text.lower().find(phrase.lower()), 0),
+                            end=max(text.lower().find(phrase.lower()), 0) + len(phrase),
+                            strategy="biomedical_phrase",
+                        )
+                    )
+
+        # If caller explicitly said what the type should be and we detected nothing,
+        # use the full raw string but only for those expected connectors.
+        if not candidates and expected:
+            candidates.append(
+                self._make_candidate(
+                    surface_text=text,
+                    entity_types=list(expected),
+                    start=0,
+                    end=len(text),
+                    strategy="expected_type_full_query_fallback",
+                )
+            )
+
+        # Dedupe by surface text + entity type tuple.
+        deduped: Dict[str, Dict[str, Any]] = {}
+        for candidate in candidates:
+            if not candidate["surface_text"]:
+                continue
+            entity_type_key = ",".join(sorted(t.value for t in candidate["entity_types"]))
+            key = f"{candidate['surface_text'].lower()}::{entity_type_key}"
+            deduped[key] = candidate
+
+        return list(deduped.values())
+
+    def _connectors_for_candidate(
+        self,
+        candidate: Dict[str, Any],
+        expected_entity_types: Optional[List[EntityType]] = None,
+    ) -> List[str]:
+        expected = self._expected_type_set(expected_entity_types)
+        connectors: List[str] = []
+
+        for entity_type in candidate["entity_types"]:
+            if expected is not None and entity_type not in expected:
+                continue
+            connectors.extend(self.CONNECTORS_BY_ENTITY_TYPE.get(entity_type, []))
+
+        return self._unique_preserve_order(connectors)
+
+    def _entity_dedupe_key(self, entity: NormalizedEntity) -> str:
+        for key in (
+            "orpha",
+            "mondo",
+            "medgen",
+            "medgen_uid",
+            "mesh",
+            "hpo",
+            "hgnc",
+            "entrez",
+            "ensembl",
+            "clinvar",
+            "vcv",
+            "rcv",
+            "scv",
+            "dbsnp",
+            "pubchem",
+            "inchikey",
+            "nct",
+        ):
+            value = (entity.source_ids or {}).get(key)
+            if value:
+                return f"{entity.entity_type}:{key}:{value}"
+
+        return f"{entity.entity_type}:label:{entity.preferred_label.strip().lower()}"
+
+    def _annotate_entity_with_span(
+        self,
+        entity: NormalizedEntity,
+        *,
+        candidate: Dict[str, Any],
+        connector_name: str,
+    ) -> NormalizedEntity:
+        provenance = dict(entity.provenance or {})
+        provenance["normalization_span"] = {
+            "surface_text": candidate["surface_text"],
+            "character_start": candidate["start"],
+            "character_end": candidate["end"],
+            "candidate_entity_types": [t.value for t in candidate["entity_types"]],
+            "span_strategy": candidate["strategy"],
+            "routed_connector": connector_name,
+        }
+        entity.provenance = provenance
+        return entity
+
+    def _is_final_normalization_candidate(self, entity: NormalizedEntity) -> bool:
+        return entity.confidence >= self.NORMALIZATION_FINAL_THRESHOLD
+
+    def _is_alternative_normalization_candidate(self, entity: NormalizedEntity) -> bool:
+        return entity.confidence >= self.NORMALIZATION_ALTERNATIVE_THRESHOLD
 
     async def normalize_entities(
         self,
@@ -28,60 +434,91 @@ class Broker:
         expected_entity_types: Optional[List[EntityType]] = None,
         disambiguation_preferences: Optional[Dict[str, Any]] = None,
     ) -> NormalizationResponse:
-        normalized_entities: List[NormalizedEntity] = []
-        alternative_candidates: List[NormalizedEntity] = []
+        normalized_entities: Dict[str, NormalizedEntity] = {}
+        alternative_candidates: Dict[str, NormalizedEntity] = {}
 
-        connectors: Sequence[str]
-        if expected_entity_types:
-            connectors = []
-            for etype in expected_entity_types:
-                if etype == EntityType.disease:
-                    connectors.append("orphadata")
-                elif etype == EntityType.gene:
-                    connectors.append("hgnc")
-                elif etype == EntityType.phenotype:
-                    connectors.append("hpo")
-                elif etype == EntityType.variant:
-                    connectors.append("clinvar")
-                elif etype == EntityType.compound:
-                    connectors.append("pubchem")
-                elif etype == EntityType.trial:
-                    connectors.append("clinicaltrials")
-        else:
-            connectors = [
-                "orphadata",
-                "hgnc",
-                "hpo",
-                "clinvar",
-                "pubchem",
-                "clinicaltrials",
-            ]
+        candidates = self._detect_candidate_spans(
+            raw_query=raw_query,
+            expected_entity_types=expected_entity_types,
+        )
 
-        async def call_normalizer(name: str) -> List[Dict[str, Any]]:
-            connector = get_connector(name)
+        async def call_normalizer(
+            connector_name: str,
+            candidate: Dict[str, Any],
+        ) -> List[NormalizedEntity]:
+            connector = get_connector(connector_name)
             try:
-                return await connector.normalize(raw_query)
+                records = await connector.normalize(candidate["surface_text"])
             except NotImplementedError:
                 return []
+            except Exception:
+                return []
 
-        tasks = [call_normalizer(name) for name in connectors]
-        results = await asyncio.gather(*tasks)
-
-        for connector_results in results:
-            for record in connector_results:
+            entities: List[NormalizedEntity] = []
+            for record in records:
                 try:
                     entity = NormalizedEntity.model_validate(record)
-                    normalized_entities.append(entity)
+                    entity = self._annotate_entity_with_span(
+                        entity,
+                        candidate=candidate,
+                        connector_name=connector_name,
+                    )
+                    entities.append(entity)
                 except Exception:
-                    try:
-                        entity_alt = NormalizedEntity.model_validate(record)
-                        alternative_candidates.append(entity_alt)
-                    except Exception:
+                    continue
+
+            return entities
+
+        tasks = []
+        for candidate in candidates:
+            for connector_name in self._connectors_for_candidate(
+                candidate,
+                expected_entity_types=expected_entity_types,
+            ):
+                tasks.append(call_normalizer(connector_name, candidate))
+
+        if not tasks:
+            return NormalizationResponse(entities=[], alternatives=None)
+
+        result_groups = await asyncio.gather(*tasks)
+
+        for group in result_groups:
+            for entity in group:
+                key = self._entity_dedupe_key(entity)
+
+                if self._is_final_normalization_candidate(entity):
+                    existing = normalized_entities.get(key)
+                    if existing is None or entity.confidence > existing.confidence:
+                        normalized_entities[key] = entity
+
+                    # If something was previously only an alternative, remove it.
+                    alternative_candidates.pop(key, None)
+
+                elif self._is_alternative_normalization_candidate(entity):
+                    if key in normalized_entities:
                         continue
 
+                    existing_alt = alternative_candidates.get(key)
+                    if existing_alt is None or entity.confidence > existing_alt.confidence:
+                        alternative_candidates[key] = entity
+
+                # Below alternative threshold: discard instead of silently surfacing.
+
+        final_entities = sorted(
+            normalized_entities.values(),
+            key=lambda e: e.confidence,
+            reverse=True,
+        )
+
+        alternatives = sorted(
+            alternative_candidates.values(),
+            key=lambda e: e.confidence,
+            reverse=True,
+        )
+
         return NormalizationResponse(
-            entities=normalized_entities,
-            alternatives=alternative_candidates or None,
+            entities=final_entities,
+            alternatives=alternatives or None,
         )
 
     async def normalize_gene(self, raw_gene: str) -> NormalizationResponse:

@@ -3,7 +3,7 @@ import logging
 import os
 import re
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Iterable, Optional
 
 import httpx
 
@@ -63,6 +63,205 @@ class PubMedConnector(BaseConnector):
             return [languages]
         return list(languages)
 
+    @staticmethod
+    def _coerce_string_list(value: Any) -> List[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, list):
+            return [str(item) for item in value if item is not None]
+        return [str(value)]
+
+    @staticmethod
+    def _unique_preserve_order(items: Iterable[str]) -> List[str]:
+        seen = set()
+        ordered: List[str] = []
+        for item in items:
+            cleaned = str(item).strip()
+            if not cleaned:
+                continue
+            key = cleaned.lower()
+            if key not in seen:
+                seen.add(key)
+                ordered.append(cleaned)
+        return ordered
+
+    @staticmethod
+    def _quote_term(term: str) -> str:
+        escaped = term.replace("\\", "\\\\").replace('"', '\\"').strip()
+        return f'"{escaped}"'
+
+    def _term_group(
+        self,
+        terms: List[str],
+        fields: List[str],
+        *,
+        limit: int = 8,
+    ) -> Optional[str]:
+        clauses: List[str] = []
+        for term in self._unique_preserve_order(terms)[:limit]:
+            quoted = self._quote_term(term)
+            for field in fields:
+                clauses.append(f"{quoted}[{field}]")
+
+        clauses = self._unique_preserve_order(clauses)
+        if not clauses:
+            return None
+        if len(clauses) == 1:
+            return clauses[0]
+        return "(" + " OR ".join(clauses) + ")"
+
+    def _normalized_terms_by_type(self, query: Dict[str, Any]) -> Dict[str, List[str]]:
+        return {
+            "disease": self._unique_preserve_order(
+                self._coerce_string_list(query.get("disease_terms"))
+            ),
+            "gene": self._unique_preserve_order(
+                self._coerce_string_list(query.get("gene_terms"))
+            ),
+            "phenotype": self._unique_preserve_order(
+                self._coerce_string_list(query.get("phenotype_terms"))
+            ),
+            "compound": self._unique_preserve_order(
+                self._coerce_string_list(query.get("compound_terms"))
+            ),
+        }
+
+    def _build_normalized_entity_clauses(self, query: Dict[str, Any]) -> List[str]:
+        """
+        Build PubMed clauses from broker-provided normalized entity terms.
+
+        Each entity type becomes one OR group. The main query builder ANDs
+        these groups together, so disease + gene queries stay narrow.
+        """
+        clauses: List[str] = []
+        terms_by_type = self._normalized_terms_by_type(query)
+
+        disease_group = self._term_group(
+            terms_by_type["disease"],
+            ["Title/Abstract", "MeSH Terms"],
+            limit=8,
+        )
+        if disease_group:
+            clauses.append(disease_group)
+
+        gene_group = self._term_group(
+            terms_by_type["gene"],
+            ["Title/Abstract"],
+            limit=6,
+        )
+        if gene_group:
+            clauses.append(gene_group)
+
+        phenotype_group = self._term_group(
+            terms_by_type["phenotype"],
+            ["Title/Abstract", "MeSH Terms"],
+            limit=6,
+        )
+        if phenotype_group:
+            clauses.append(phenotype_group)
+
+        compound_group = self._term_group(
+            terms_by_type["compound"],
+            ["Title/Abstract", "MeSH Terms", "Substance Name"],
+            limit=6,
+        )
+        if compound_group:
+            clauses.append(compound_group)
+
+        return clauses
+
+    def _normalized_text(self, text: Optional[str]) -> str:
+        if not text:
+            return ""
+        return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
+
+    def _term_matches_text(self, term: str, normalized_text: str) -> bool:
+        normalized_term = self._normalized_text(term)
+        if not normalized_term:
+            return False
+
+        term_tokens = normalized_term.split()
+
+        # Single-token terms like ACVR1 should match as exact tokens, not substrings.
+        if len(term_tokens) == 1:
+            return term_tokens[0] in set(normalized_text.split())
+
+        # Multi-word labels like fibrodysplasia ossificans progressiva
+        # should match as normalized phrases.
+        return normalized_term in normalized_text
+
+    def _validate_entity_terms(
+        self,
+        record: Dict[str, Any],
+        abstract: Optional[str],
+        query: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Validate returned PubMed records against normalized entity terms.
+
+        This catches cases where PubMed returned a result because of MeSH,
+        publication type, or weak keyword behavior, but the title/abstract
+        does not visibly mention the normalized entities.
+        """
+        searchable_text = self._normalized_text(
+            " ".join(
+                [
+                    str(record.get("title") or ""),
+                    str(abstract or ""),
+                ]
+            )
+        )
+
+        terms_by_type = self._normalized_terms_by_type(query)
+
+        matched_terms: Dict[str, List[str]] = {}
+        missing_groups: List[str] = []
+        match_strengths: Dict[str, float] = {}
+
+        for entity_type, terms in terms_by_type.items():
+            if not terms:
+                matched_terms[entity_type] = []
+                match_strengths[entity_type] = 0.0
+                continue
+
+            matched = [
+                term
+                for term in terms
+                if self._term_matches_text(term, searchable_text)
+            ]
+
+            matched_terms[entity_type] = matched
+            match_strengths[entity_type] = len(matched) / max(len(terms), 1)
+
+            if not matched:
+                missing_groups.append(entity_type)
+
+        required_groups = [
+            entity_type
+            for entity_type, terms in terms_by_type.items()
+            if terms
+        ]
+
+        matched_groups = [
+            entity_type
+            for entity_type in required_groups
+            if matched_terms.get(entity_type)
+        ]
+
+        return {
+            "required_groups": required_groups,
+            "matched_groups": matched_groups,
+            "missing_groups": missing_groups,
+            "matched_terms": matched_terms,
+            "match_strengths": match_strengths,
+            "exact_disease_match": bool(matched_terms.get("disease")),
+            "exact_gene_match": bool(matched_terms.get("gene")),
+            "phenotype_overlap_strength": match_strengths.get("phenotype") or None,
+            "compound_match_strength": match_strengths.get("compound") or None,
+        }
+
     async def _request_eutils(
         self,
         client: httpx.AsyncClient,
@@ -70,13 +269,13 @@ class PubMedConnector(BaseConnector):
         params: Dict[str, Any],
         *,
         use_post: bool = False,
-    ) -> httpx.Response:
-        if use_post:
-            response = await client.post(url, data=params)
-        else:
-            response = await client.get(url, params=params)
-        response.raise_for_status()
-        return response
+        ) -> httpx.Response:
+            if use_post:
+                response = await client.post(url, data=params)
+            else:
+                response = await client.get(url, params=params)
+            response.raise_for_status()
+            return response
 
     def _build_esearch_params(self, query: Dict[str, Any]) -> Dict[str, Any]:
         filters = query.get("filters") or {}
@@ -89,8 +288,12 @@ class PubMedConnector(BaseConnector):
         }
 
         term_parts: List[str] = []
-        keywords = (query.get("keywords") or "").strip()
 
+        # New: normalized disease/gene/phenotype/compound terms are used first.
+        term_parts.extend(self._build_normalized_entity_clauses(query))
+
+        # Existing keyword behavior remains as a fallback/additional constraint.
+        keywords = (query.get("keywords") or "").strip()
         if keywords:
             if filters.get("title_only"):
                 term_parts.append(f"({keywords})[Title]")
@@ -211,6 +414,7 @@ class PubMedConnector(BaseConnector):
         abstract: Optional[str],
         pmcid: Optional[str],
         query: Dict[str, Any],
+        validation: Dict[str, Any],
     ) -> Dict[str, Any]:
         filters = query.get("filters") or {}
         keywords = query.get("keywords") or ""
@@ -250,15 +454,42 @@ class PubMedConnector(BaseConnector):
             recency = max(0.0, 1.0 - (age / 15.0))
 
         full_text_available = bool(pmcid)
-        source_trust_level = 0.9  # PubMed-indexed result
+        source_trust_level = 0.9
 
-        score = (
+        base_score = (
             0.35 * title_match_strength
             + 0.20 * abstract_match_strength
             + 0.15 * publication_type_score
             + 0.10 * recency
             + 0.10 * (1.0 if full_text_available else 0.0)
             + 0.10 * (1.0 if abstract else 0.0)
+        )
+
+        matched_groups = validation.get("matched_groups", []) or []
+        missing_groups = validation.get("missing_groups", []) or []
+
+        entity_match_bonus = 0.08 * len(matched_groups)
+        entity_missing_penalty = 0.18 * len(missing_groups)
+
+        # Optional stricter penalties when callers explicitly request exact matching.
+        if filters.get("exact_disease_required") and "disease" in missing_groups:
+            entity_missing_penalty += 0.30
+
+        if filters.get("exact_gene_required") and "gene" in missing_groups:
+            entity_missing_penalty += 0.30
+
+        if filters.get("exact_phenotype_required") and "phenotype" in missing_groups:
+            entity_missing_penalty += 0.25
+
+        if filters.get("exact_compound_required") and "compound" in missing_groups:
+            entity_missing_penalty += 0.25
+
+        score = max(
+            0.0,
+            min(
+                1.0,
+                base_score + entity_match_bonus - entity_missing_penalty,
+            ),
         )
 
         return {
@@ -268,6 +499,8 @@ class PubMedConnector(BaseConnector):
             "recency": round(recency, 4),
             "full_text_available": full_text_available,
             "source_trust_level": source_trust_level,
+            "entity_match_bonus": round(entity_match_bonus, 4),
+            "entity_missing_penalty": round(entity_missing_penalty, 4),
             "score": round(score, 4),
         }
 
@@ -348,11 +581,18 @@ class PubMedConnector(BaseConnector):
             abstract = abstracts_by_pmid.get(pmid)
             year = self._parse_year(record.get("pubdate"))
 
+            validation = self._validate_entity_terms(
+                record=record,
+                abstract=abstract,
+                query=query,
+            )
+
             scoring = self._score_record(
                 record=record,
                 abstract=abstract,
                 pmcid=pmcid,
                 query=query,
+                validation=validation,
             )
 
             result = LiteratureResult(
@@ -365,9 +605,9 @@ class PubMedConnector(BaseConnector):
                 journal=record.get("fulljournalname"),
                 authors=authors,
                 match_features=LiteratureMatchFeatures(
-                    exact_disease_id=False,
-                    exact_gene_id=False,
-                    phenotype_overlap_strength=None,
+                    exact_disease_id=validation["exact_disease_match"],
+                    exact_gene_id=validation["exact_gene_match"],
+                    phenotype_overlap_strength=validation["phenotype_overlap_strength"],
                     mesh_topic_importance=None,
                     title_match_strength=scoring["title_match_strength"],
                     abstract_match_strength=scoring["abstract_match_strength"],
@@ -380,7 +620,15 @@ class PubMedConnector(BaseConnector):
                 provenance=LiteratureProvenance(
                     source=self.name,
                     retrieved_at=now,
-                    raw_record=record,
+                    raw_record={
+                        "esummary": record,
+                        "esearch_term": term,
+                        "entity_validation": validation,
+                        "scoring_adjustments": {
+                            "entity_match_bonus": scoring["entity_match_bonus"],
+                            "entity_missing_penalty": scoring["entity_missing_penalty"],
+                        },
+                    },
                 ),
             )
             results.append(result)
