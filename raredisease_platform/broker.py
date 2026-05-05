@@ -649,6 +649,267 @@ class Broker:
         connector = get_connector("hgnc")
         return await connector.crosswalk_ids(identifier, namespace=namespace)
 
+    def _merge_normalization_bundles(
+        self,
+        *bundles: Optional[NormalizationResponse],
+    ) -> Optional[NormalizationResponse]:
+        entities_by_key: Dict[str, NormalizedEntity] = {}
+        alternatives_by_key: Dict[str, NormalizedEntity] = {}
+        traces: List[Dict[str, Any]] = []
+
+        for bundle in bundles:
+            if not bundle:
+                continue
+
+            if bundle.normalization_trace:
+                traces.append(bundle.normalization_trace)
+
+            for entity in bundle.entities or []:
+                key = self._entity_dedupe_key(entity)
+                existing = entities_by_key.get(key)
+                if existing is None or entity.confidence > existing.confidence:
+                    entities_by_key[key] = entity
+
+                alternatives_by_key.pop(key, None)
+
+            for entity in bundle.alternatives or []:
+                key = self._entity_dedupe_key(entity)
+                if key in entities_by_key:
+                    continue
+
+                existing = alternatives_by_key.get(key)
+                if existing is None or entity.confidence > existing.confidence:
+                    alternatives_by_key[key] = entity
+
+        entities = sorted(
+            entities_by_key.values(),
+            key=lambda entity: entity.confidence,
+            reverse=True,
+        )
+        alternatives = sorted(
+            alternatives_by_key.values(),
+            key=lambda entity: entity.confidence,
+            reverse=True,
+        )
+
+        if not entities and not alternatives and not traces:
+            return None
+
+        return NormalizationResponse(
+            entities=entities,
+            alternatives=alternatives or None,
+            normalization_trace={
+                "source": "merged_normalization_bundles",
+                "bundle_count": len([bundle for bundle in bundles if bundle]),
+                "merged_entity_count": len(entities),
+                "merged_alternative_count": len(alternatives),
+                "component_traces": traces,
+            },
+        )
+
+    async def _hydrate_literature_ids_to_bundle(
+        self,
+        *,
+        disease_ids: Optional[List[str]] = None,
+        gene_ids: Optional[List[str]] = None,
+        phenotype_ids: Optional[List[str]] = None,
+        compound_ids: Optional[List[str]] = None,
+    ) -> Optional[NormalizationResponse]:
+        """
+        Convert direct literature-search ID inputs into normalized entities.
+
+        This lets /search_literature support both:
+        - normalized_bundle-first usage, which is preferred for agents
+        - direct ID usage, which is convenient for API callers
+
+        The hydrated bundle is then passed through the same term-derivation path
+        as a normal /normalize response.
+        """
+        id_specs = [
+            {
+                "input_name": "disease_ids",
+                "ids": disease_ids or [],
+                "connector": "orphadata",
+                "entity_type": EntityType.disease,
+            },
+            {
+                "input_name": "gene_ids",
+                "ids": gene_ids or [],
+                "connector": "hgnc",
+                "entity_type": EntityType.gene,
+            },
+            {
+                "input_name": "phenotype_ids",
+                "ids": phenotype_ids or [],
+                "connector": "hpo",
+                "entity_type": EntityType.phenotype,
+            },
+            {
+                "input_name": "compound_ids",
+                "ids": compound_ids or [],
+                "connector": "pubchem",
+                "entity_type": EntityType.compound,
+            },
+        ]
+
+        hydration_trace: Dict[str, Any] = {
+            "source": "literature_id_hydration",
+            "inputs": {
+                "disease_ids": disease_ids or [],
+                "gene_ids": gene_ids or [],
+                "phenotype_ids": phenotype_ids or [],
+                "compound_ids": compound_ids or [],
+            },
+            "connector_calls": [],
+            "warnings": [],
+        }
+
+        async def hydrate_one(
+            *,
+            identifier: str,
+            connector_name: str,
+            expected_entity_type: EntityType,
+            input_name: str,
+        ) -> List[NormalizedEntity]:
+            call_trace = {
+                "input_name": input_name,
+                "identifier": identifier,
+                "connector": connector_name,
+                "expected_entity_type": expected_entity_type.value,
+                "status": "not_started",
+                "records_returned": 0,
+                "entities_accepted": 0,
+                "error": None,
+            }
+
+            connector = get_connector(connector_name)
+
+            try:
+                records = await connector.normalize(identifier)
+                call_trace["status"] = "ok"
+                call_trace["records_returned"] = len(records or [])
+            except NotImplementedError:
+                call_trace["status"] = "not_implemented"
+                hydration_trace["connector_calls"].append(call_trace)
+                return []
+            except Exception as exc:
+                call_trace["status"] = "error"
+                call_trace["error"] = f"{type(exc).__name__}: {exc}"
+                hydration_trace["connector_calls"].append(call_trace)
+                return []
+
+            entities: List[NormalizedEntity] = []
+            for record in records or []:
+                try:
+                    entity = NormalizedEntity.model_validate(record)
+                except Exception as exc:
+                    hydration_trace["warnings"].append(
+                        {
+                            "identifier": identifier,
+                            "connector": connector_name,
+                            "reason": "invalid_normalized_entity_record",
+                            "error": f"{type(exc).__name__}: {exc}",
+                        }
+                    )
+                    continue
+
+                if entity.entity_type != expected_entity_type:
+                    hydration_trace["warnings"].append(
+                        {
+                            "identifier": identifier,
+                            "connector": connector_name,
+                            "reason": "unexpected_entity_type",
+                            "expected": expected_entity_type.value,
+                            "actual": entity.entity_type.value,
+                        }
+                    )
+                    continue
+
+                provenance = dict(entity.provenance or {})
+                provenance["literature_id_hydration"] = {
+                    "input_name": input_name,
+                    "input_identifier": identifier,
+                    "connector": connector_name,
+                    "expected_entity_type": expected_entity_type.value,
+                }
+                entity.provenance = provenance
+
+                entities.append(entity)
+
+            call_trace["entities_accepted"] = len(entities)
+            hydration_trace["connector_calls"].append(call_trace)
+            return entities
+
+        tasks = []
+        for spec in id_specs:
+            for identifier in spec["ids"]:
+                if not identifier or not str(identifier).strip():
+                    continue
+
+                tasks.append(
+                    hydrate_one(
+                        identifier=str(identifier).strip(),
+                        connector_name=spec["connector"],
+                        expected_entity_type=spec["entity_type"],
+                        input_name=spec["input_name"],
+                    )
+                )
+
+        if not tasks:
+            return None
+
+        result_groups = await asyncio.gather(*tasks)
+
+        entities_by_key: Dict[str, NormalizedEntity] = {}
+        alternatives_by_key: Dict[str, NormalizedEntity] = {}
+
+        for group in result_groups:
+            for entity in group:
+                key = self._entity_dedupe_key(entity)
+
+                if self._is_final_normalization_candidate(entity):
+                    existing = entities_by_key.get(key)
+                    if existing is None or entity.confidence > existing.confidence:
+                        entities_by_key[key] = entity
+                    alternatives_by_key.pop(key, None)
+
+                elif self._is_alternative_normalization_candidate(entity):
+                    if key in entities_by_key:
+                        continue
+                    existing_alt = alternatives_by_key.get(key)
+                    if existing_alt is None or entity.confidence > existing_alt.confidence:
+                        alternatives_by_key[key] = entity
+
+                else:
+                    hydration_trace["warnings"].append(
+                        {
+                            "entity_type": entity.entity_type.value,
+                            "preferred_label": entity.preferred_label,
+                            "confidence": entity.confidence,
+                            "reason": "hydrated_entity_below_alternative_threshold",
+                        }
+                    )
+
+        entities = sorted(
+            entities_by_key.values(),
+            key=lambda entity: entity.confidence,
+            reverse=True,
+        )
+        alternatives = sorted(
+            alternatives_by_key.values(),
+            key=lambda entity: entity.confidence,
+            reverse=True,
+        )
+
+        hydration_trace["final_entity_count"] = len(entities)
+        hydration_trace["alternative_candidate_count"] = len(alternatives)
+
+        return NormalizationResponse(
+            entities=entities,
+            alternatives=alternatives or None,
+            normalization_trace=hydration_trace,
+        )
+
     async def search_literature(
         self,
         disease_ids: Optional[List[str]] = None,
@@ -664,7 +925,21 @@ class Broker:
         else:
             filter_payload = filters or {}
 
-        derived_terms = self._extract_literature_terms_from_bundle(normalized_bundle)
+        hydrated_id_bundle = await self._hydrate_literature_ids_to_bundle(
+            disease_ids=disease_ids,
+            gene_ids=gene_ids,
+            phenotype_ids=phenotype_ids,
+            compound_ids=compound_ids,
+        )
+
+        effective_normalized_bundle = self._merge_normalization_bundles(
+            normalized_bundle,
+            hydrated_id_bundle,
+        )
+
+        derived_terms = self._extract_literature_terms_from_bundle(
+            effective_normalized_bundle
+        )
 
         query: Dict[str, Any] = {
             "disease_ids": disease_ids,
@@ -673,7 +948,17 @@ class Broker:
             "compound_ids": compound_ids,
             "keywords": keywords,
             "filters": filter_payload,
-            # Europe PMC-friendly derived terms from normalized entities
+            "normalized_bundle_trace": (
+                effective_normalized_bundle.normalization_trace
+                if effective_normalized_bundle
+                else None
+            ),
+            "direct_id_hydration_trace": (
+                hydrated_id_bundle.normalization_trace
+                if hydrated_id_bundle
+                else None
+            ),
+            # PubMed and Europe PMC-friendly derived terms from normalized entities.
             "disease_terms": derived_terms["disease_terms"],
             "gene_terms": derived_terms["gene_terms"],
             "phenotype_terms": derived_terms["phenotype_terms"],
