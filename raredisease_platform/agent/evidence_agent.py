@@ -19,8 +19,8 @@ from .planner import EvidenceQueryPlanner
 class EvidenceAgentConfig:
     broker_base_url: str = "http://127.0.0.1:8000"
     timeout_seconds: float = 180.0
-    default_retmax: int = 10
-    include_structured_evidence: bool = True
+    default_retmax: int = 3
+    include_structured_evidence: bool = False
     return_raw_payload: bool = False
 
 
