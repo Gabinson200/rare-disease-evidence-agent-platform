@@ -248,3 +248,72 @@ class Dossier(BaseModel):
     summary_blocks: Optional[List[str]] = None
     citation_references: Optional[List[str]] = None
     evidence_graph: Optional[EvidenceGraph] = None
+
+
+class EvidenceQueryRequest(BaseModel):
+    """
+    High-level agent-facing evidence query.
+
+    This is the preferred input shape for OpenClaw/MCP-style callers because it
+    forces the safe pipeline:
+
+    raw query -> normalization -> literature search -> structured evidence -> graph assembly
+    """
+
+    raw_query: str = Field(
+        ...,
+        description="Natural language biomedical query to normalize and retrieve evidence for.",
+    )
+    expected_entity_types: Optional[List[EntityType]] = Field(
+        default=None,
+        description="Optional expected entity types, e.g. ['disease', 'gene'].",
+    )
+    disambiguation_preferences: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional preferences for resolving ambiguous normalization candidates.",
+    )
+
+    literature_keywords: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional additional literature keyword constraint. "
+            "Use this for intent terms like 'case report' rather than passing the whole raw query."
+        ),
+    )
+    literature_filters: Optional[PubMedSearchFilters] = Field(
+        default=None,
+        description="Optional PubMed/Europe PMC literature filters.",
+    )
+
+    include_structured_evidence: bool = Field(
+        default=True,
+        description="Whether to retrieve structured non-literature evidence after normalization.",
+    )
+    requested_evidence_types: Optional[List[str]] = Field(
+        default=None,
+        description="Optional structured evidence types, e.g. ['genes', 'variants', 'trials'].",
+    )
+    structured_filters: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional free-form filters for structured evidence retrieval.",
+    )
+
+    scoring_profile: Optional[str] = Field(
+        default=None,
+        description="Optional scoring profile name for graph assembly.",
+    )
+
+
+class EvidenceQueryResponse(BaseModel):
+    """
+    High-level agent-facing evidence package.
+
+    This response is intentionally redundant: it preserves the intermediate
+    objects that an LLM agent needs for transparent reasoning and citation.
+    """
+
+    normalized_bundle: NormalizationResponse
+    literature_results: List[LiteratureResult] = Field(default_factory=list)
+    structured_evidence: Optional[StructuredEvidenceResult] = None
+    evidence_graph: Optional[EvidenceGraph] = None
+    trace: Dict[str, Any] = Field(default_factory=dict)

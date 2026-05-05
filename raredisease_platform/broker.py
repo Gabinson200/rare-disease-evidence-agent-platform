@@ -132,6 +132,70 @@ class Broker:
                 )
             )
 
+    def _trim_compound_context_surface(self, surface: str) -> str:
+        """
+        Trim compound-context captures so gene symbols or trailing query text do not
+        get swallowed into the compound span.
+
+        Example:
+            "aspirin ACVR1" -> "aspirin"
+            "sodium phenylbutyrate ACVR1" -> "sodium phenylbutyrate"
+            "aspirin and ACVR1" -> "aspirin"
+        """
+        cleaned = re.sub(r"\s+", " ", surface).strip(" .,;:")
+
+        if not cleaned:
+            return ""
+
+        tokens = cleaned.split()
+        kept: List[str] = []
+
+        stopwords = {
+            "and",
+            "or",
+            "with",
+            "involving",
+            "associated",
+            "for",
+            "plus",
+            "gene",
+            "genes",
+            "variant",
+            "variants",
+            "disease",
+            "diseases",
+        }
+
+        for token in tokens:
+            stripped = token.strip(" .,;:")
+
+            if not stripped:
+                continue
+
+            lower = stripped.lower()
+            upper = stripped.upper()
+
+            if lower in stopwords:
+                break
+
+            # Stop before likely gene symbols such as ACVR1, TP53, CFTR.
+            # This prevents "compound aspirin ACVR1" from becoming one compound span.
+            if (
+                len(stripped) >= 2
+                and upper == stripped
+                and re.fullmatch(r"[A-Z][A-Z0-9-]{1,10}", stripped)
+                and stripped not in self.COMMON_NON_GENE_TOKENS
+            ):
+                break
+
+            # Stop before stable biomedical IDs that should be routed separately.
+            if re.fullmatch(r"HGNC:\d+|ENSG\d{8,}|ORPHA[:_ ]?\d+|MONDO[:_]\d+|HP:\d{7}|NCT\d{8}", stripped, re.IGNORECASE):
+                break
+
+            kept.append(stripped)
+
+        return " ".join(kept).strip(" .,;:")
+
     def _detect_candidate_spans(
         self,
         raw_query: str,
@@ -154,7 +218,9 @@ class Broker:
         def allowed(entity_type: EntityType) -> bool:
             return expected is None or entity_type in expected
 
+        # ------------------------------------------------------------------
         # Stable identifier spans.
+        # ------------------------------------------------------------------
         if allowed(EntityType.disease):
             self._add_regex_candidates(
                 candidates,
@@ -242,14 +308,18 @@ class Broker:
         occupied_ranges = [(c["start"], c["end"]) for c in candidates]
 
         def overlaps_existing(start: int, end: int) -> bool:
-            return any(start < e and end > s for s, e in occupied_ranges)
+            return any(start < existing_end and end > existing_start for existing_start, existing_end in occupied_ranges)
 
+        # ------------------------------------------------------------------
         # Gene-like symbols: ACVR1, CFTR, TP53, LMNB1.
+        # ------------------------------------------------------------------
         if allowed(EntityType.gene):
             for match in re.finditer(r"\b[A-Z][A-Z0-9-]{1,10}\b", text):
                 token = match.group(0)
+
                 if token in self.COMMON_NON_GENE_TOKENS:
                     continue
+
                 if overlaps_existing(match.start(), match.end()):
                     continue
 
@@ -264,19 +334,31 @@ class Broker:
                 )
                 occupied_ranges.append((match.start(), match.end()))
 
-        # Compound context windows: "treated with X", "drug X", "compound X".
+        # ------------------------------------------------------------------
+        # Compound context windows:
+        # "treated with X", "drug X", "compound X", etc.
+        #
+        # The surface is trimmed so:
+        # "compound aspirin ACVR1" -> "aspirin"
+        # instead of "aspirin ACVR1".
+        # ------------------------------------------------------------------
         if allowed(EntityType.compound):
             compound_context_re = re.compile(
                 r"\b(?:drug|compound|intervention|treatment|therapy|treated with|using)\s+"
-                r"([A-Za-z][A-Za-z0-9+\- ]{1,60})",
+                r"([A-Za-z][A-Za-z0-9+\- ]{1,80})",
                 re.IGNORECASE,
             )
+
             for match in compound_context_re.finditer(text):
-                surface = match.group(1).strip(" .,;:")
+                raw_surface = match.group(1).strip(" .,;:")
+                surface = self._trim_compound_context_surface(raw_surface)
+
                 if not surface:
                     continue
+
                 start = match.start(1)
-                end = match.end(1)
+                end = start + len(surface)
+
                 if overlaps_existing(start, end):
                     continue
 
@@ -291,8 +373,10 @@ class Broker:
                 )
                 occupied_ranges.append((start, end))
 
+        # ------------------------------------------------------------------
         # Disease / phenotype phrase fallback.
         # This is intentionally much narrower than old raw-query-to-all-connectors behavior.
+        # ------------------------------------------------------------------
         if allowed(EntityType.disease) or allowed(EntityType.phenotype):
             residual = text
 
@@ -322,25 +406,39 @@ class Broker:
 
                 # Only route phrase to HPO automatically when expected or symptom-ish.
                 symptomish = any(
-                    w.lower() in {"pain", "seizures", "delay", "weakness", "ossification", "short", "stature"}
-                    for w in words
+                    word.lower()
+                    in {
+                        "pain",
+                        "seizures",
+                        "delay",
+                        "weakness",
+                        "ossification",
+                        "short",
+                        "stature",
+                    }
+                    for word in words
                 )
+
                 if allowed(EntityType.phenotype) and (expected is not None or symptomish):
                     phrase_types.append(EntityType.phenotype)
 
                 if phrase_types:
+                    start = max(text.lower().find(phrase.lower()), 0)
+
                     candidates.append(
                         self._make_candidate(
                             surface_text=phrase,
                             entity_types=phrase_types,
-                            start=max(text.lower().find(phrase.lower()), 0),
-                            end=max(text.lower().find(phrase.lower()), 0) + len(phrase),
+                            start=start,
+                            end=start + len(phrase),
                             strategy="biomedical_phrase",
                         )
                     )
 
+        # ------------------------------------------------------------------
         # If caller explicitly said what the type should be and we detected nothing,
         # use the full raw string but only for those expected connectors.
+        # ------------------------------------------------------------------
         if not candidates and expected:
             candidates.append(
                 self._make_candidate(
@@ -352,12 +450,17 @@ class Broker:
                 )
             )
 
+        # ------------------------------------------------------------------
         # Dedupe by surface text + entity type tuple.
+        # ------------------------------------------------------------------
         deduped: Dict[str, Dict[str, Any]] = {}
         for candidate in candidates:
             if not candidate["surface_text"]:
                 continue
-            entity_type_key = ",".join(sorted(t.value for t in candidate["entity_types"]))
+
+            entity_type_key = ",".join(
+                sorted(entity_type.value for entity_type in candidate["entity_types"])
+            )
             key = f"{candidate['surface_text'].lower()}::{entity_type_key}"
             deduped[key] = candidate
 
@@ -1027,6 +1130,137 @@ class Broker:
         merged_results = list(deduped.values())
         merged_results.sort(key=lambda x: x.score, reverse=True)
         return merged_results
+
+    async def query_evidence(
+        self,
+        *,
+        raw_query: str,
+        expected_entity_types: Optional[List[EntityType]] = None,
+        disambiguation_preferences: Optional[Dict[str, Any]] = None,
+        literature_keywords: Optional[str] = None,
+        literature_filters: Optional[PubMedSearchFilters | Dict[str, Any]] = None,
+        include_structured_evidence: bool = True,
+        requested_evidence_types: Optional[List[str]] = None,
+        structured_filters: Optional[Dict[str, Any]] = None,
+        scoring_profile: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        High-level evidence query pipeline for agent-facing usage.
+
+        This is the preferred orchestration path for OpenClaw/MCP tools because
+        it prevents the agent from doing raw source fan-out manually.
+        """
+        started_at = datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
+
+        pipeline_trace: Dict[str, Any] = {
+            "source": "broker.query_evidence",
+            "raw_query": raw_query,
+            "started_at": started_at,
+            "steps": [],
+            "warnings": [],
+        }
+
+        # ------------------------------------------------------------------
+        # Step 1: Normalize
+        # ------------------------------------------------------------------
+        normalized_bundle = await self.normalize_entities(
+            raw_query=raw_query,
+            expected_entity_types=expected_entity_types,
+            disambiguation_preferences=disambiguation_preferences,
+        )
+
+        pipeline_trace["steps"].append(
+            {
+                "step": "normalize_entities",
+                "status": "ok",
+                "entity_count": len(normalized_bundle.entities or []),
+                "alternative_count": len(normalized_bundle.alternatives or []),
+            }
+        )
+
+        if not normalized_bundle.entities:
+            pipeline_trace["warnings"].append(
+                "No high-confidence normalized entities were found. Literature search will still run if literature_keywords are provided, but results should be treated as lower confidence."
+            )
+
+        # ------------------------------------------------------------------
+        # Step 2: Literature search
+        # ------------------------------------------------------------------
+        literature_results = await self.search_literature(
+            keywords=literature_keywords,
+            filters=literature_filters,
+            normalized_bundle=normalized_bundle,
+        )
+
+        pipeline_trace["steps"].append(
+            {
+                "step": "search_literature",
+                "status": "ok",
+                "result_count": len(literature_results or []),
+                "literature_keywords": literature_keywords,
+            }
+        )
+
+        # ------------------------------------------------------------------
+        # Step 3: Structured evidence search
+        # ------------------------------------------------------------------
+        structured_evidence: Optional[StructuredEvidenceResult] = None
+        if include_structured_evidence:
+            structured_evidence = await self.search_structured_evidence(
+                normalized_bundle=normalized_bundle,
+                requested_evidence_types=requested_evidence_types,
+                filters=structured_filters,
+            )
+
+            relationship_count = len(structured_evidence.relationships or []) if structured_evidence else 0
+            pipeline_trace["steps"].append(
+                {
+                    "step": "search_structured_evidence",
+                    "status": "ok",
+                    "relationship_count": relationship_count,
+                    "requested_evidence_types": requested_evidence_types,
+                }
+            )
+        else:
+            structured_evidence = StructuredEvidenceResult()
+            pipeline_trace["steps"].append(
+                {
+                    "step": "search_structured_evidence",
+                    "status": "skipped",
+                    "reason": "include_structured_evidence=false",
+                }
+            )
+
+        # ------------------------------------------------------------------
+        # Step 4: Evidence graph assembly
+        # ------------------------------------------------------------------
+        evidence_graph = await self.assemble_evidence_graph(
+            normalized_bundle=normalized_bundle,
+            literature_results=literature_results,
+            structured_evidence_results=structured_evidence,
+            scoring_profile=scoring_profile,
+        )
+
+        pipeline_trace["steps"].append(
+            {
+                "step": "assemble_evidence_graph",
+                "status": "ok",
+                "node_count": len(evidence_graph.nodes or []),
+                "edge_count": len(evidence_graph.edges or []),
+                "scoring_profile": scoring_profile,
+            }
+        )
+
+        completed_at = datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
+        pipeline_trace["completed_at"] = completed_at
+
+        return {
+            "normalized_bundle": normalized_bundle,
+            "literature_results": literature_results,
+            "structured_evidence": structured_evidence,
+            "evidence_graph": evidence_graph,
+            "trace": pipeline_trace,
+        }
 
     async def search_structured_evidence(
         self,

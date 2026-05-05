@@ -131,3 +131,29 @@ async def test_normalize_entities_moves_weak_matches_to_alternatives(monkeypatch
     assert response.alternatives[0].preferred_label == "WEAK1"
     assert response.normalization_trace is not None
     assert response.normalization_trace["alternative_candidate_count"] == 1
+
+@pytest.mark.asyncio
+async def test_detect_candidate_spans_splits_compound_from_gene_symbol():
+    broker = Broker()
+
+    candidates = broker._detect_candidate_spans(
+        raw_query="compound aspirin ACVR1",
+        expected_entity_types=[EntityType.compound, EntityType.gene],
+    )
+
+    compound_candidates = [
+        candidate for candidate in candidates
+        if EntityType.compound in candidate["entity_types"]
+    ]
+    gene_candidates = [
+        candidate for candidate in candidates
+        if EntityType.gene in candidate["entity_types"]
+    ]
+
+    assert any(candidate["surface_text"].lower() == "aspirin" for candidate in compound_candidates)
+    assert any(candidate["surface_text"] == "ACVR1" for candidate in gene_candidates)
+
+    assert not any(
+        candidate["surface_text"].lower() == "aspirin acvr1"
+        for candidate in compound_candidates
+    )

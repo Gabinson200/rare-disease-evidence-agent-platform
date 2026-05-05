@@ -15,6 +15,8 @@ from .models import (
     NormalizedEntity,
     NormalizeRequest,
     StructuredEvidenceResult,
+    EvidenceQueryRequest,
+    EvidenceQueryResponse,
 )
 
 APP_DESCRIPTION = """
@@ -38,6 +40,8 @@ For most workflows, use the endpoints in this order:
 3. **POST `/search_structured`**
 4. **POST `/assemble_graph`**
 5. **POST `/generate_dossier`**
+
+For agent-facing workflows, prefer POST `/evidence/query`.
 
 ## Quick examples
 
@@ -315,6 +319,67 @@ async def search_literature(
         normalized_bundle=request.normalized_bundle,
     )
 
+@app.post(
+    "/evidence/query",
+    response_model=EvidenceQueryResponse,
+    tags=["evidence"],
+    summary="Run the full normalize-search-assemble evidence workflow",
+    description=(
+        "High-level agent-facing endpoint that runs the safe evidence retrieval pipeline:\n\n"
+        "1. normalize raw biomedical query\n"
+        "2. search literature using normalized entities\n"
+        "3. optionally retrieve structured evidence\n"
+        "4. assemble an evidence graph\n\n"
+        "This endpoint is intended to become the primary OpenClaw/MCP tool entry point."
+    ),
+)
+async def query_evidence(
+    request: EvidenceQueryRequest = Body(
+        ...,
+        openapi_examples={
+            "disease_gene_case_reports": {
+                "summary": "Disease + gene case report query",
+                "value": {
+                    "raw_query": "case reports for fibrodysplasia ossificans progressiva involving ACVR1",
+                    "expected_entity_types": ["disease", "gene"],
+                    "literature_keywords": "case report",
+                    "literature_filters": {
+                        "case_reports_only": True,
+                        "exact_disease_required": True,
+                        "exact_gene_required": True,
+                        "retmax": 10,
+                    },
+                    "include_structured_evidence": True,
+                    "requested_evidence_types": ["genes", "variants", "relationships"],
+                },
+            },
+            "gene_first": {
+                "summary": "Gene-first query",
+                "value": {
+                    "raw_query": "ACVR1",
+                    "expected_entity_types": ["gene"],
+                    "literature_keywords": "rare disease",
+                    "literature_filters": {
+                        "retmax": 10,
+                    },
+                    "include_structured_evidence": True,
+                    "requested_evidence_types": ["genes", "diseases", "variants"],
+                },
+            },
+        },
+    )
+) -> EvidenceQueryResponse:
+    return await broker.query_evidence(
+        raw_query=request.raw_query,
+        expected_entity_types=request.expected_entity_types,
+        disambiguation_preferences=request.disambiguation_preferences,
+        literature_keywords=request.literature_keywords,
+        literature_filters=request.literature_filters,
+        include_structured_evidence=request.include_structured_evidence,
+        requested_evidence_types=request.requested_evidence_types,
+        structured_filters=request.structured_filters,
+        scoring_profile=request.scoring_profile,
+    )
 
 @app.post(
     "/search_structured",
