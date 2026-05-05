@@ -446,7 +446,7 @@ class PubMedConnector(BaseConnector):
             publication_type_score = 0.0
 
         year = self._parse_year(record.get("pubdate"))
-        current_year = datetime.datetime.utcnow().year
+        current_year = datetime.datetime.now(datetime.UTC).year
         if year is None:
             recency = 0.3
         else:
@@ -557,7 +557,7 @@ class PubMedConnector(BaseConnector):
                 abstracts_by_pmid = {}
 
         results: List[LiteratureResult] = []
-        now = datetime.datetime.utcnow().isoformat() + "Z"
+        now = datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
 
         for pmid in id_list:
             record = esummary_data.get("result", {}).get(pmid)

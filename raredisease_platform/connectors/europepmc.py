@@ -347,7 +347,7 @@ class EuropePMCConnector(BaseConnector):
 
         results_raw = payload.get("resultList", {}).get("result", []) or []
         results: List[LiteratureResult] = []
-        now = datetime.datetime.utcnow().isoformat() + "Z"
+        now = datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
 
         keyword_tokens = set(self._tokenize(query.get("keywords") or ""))
 
@@ -371,7 +371,7 @@ class EuropePMCConnector(BaseConnector):
                 or record.get("fullTextUrlList")
             )
             pub_type = record.get("pubType")
-            current_year = datetime.datetime.utcnow().year
+            current_year = datetime.datetime.now(datetime.UTC).year
             recency = max(0.0, 1.0 - (max(0, current_year - year) / 15.0)) if year else 0.3
 
             score = round(

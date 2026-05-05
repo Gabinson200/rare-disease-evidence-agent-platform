@@ -71,11 +71,18 @@ class NormalizationResponse(BaseModel):
 
     entities: List[NormalizedEntity] = Field(
         default_factory=list,
-        description="List of normalized entities.",
+        description="List of high-confidence normalized entities.",
     )
     alternatives: Optional[List[NormalizedEntity]] = Field(
         None,
-        description="Candidate alternative entities when normalization is ambiguous.",
+        description="Candidate alternative entities when normalization is ambiguous or below final threshold.",
+    )
+    normalization_trace: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Lightweight audit/debug trace containing detected spans, routed connectors, "
+            "threshold decisions, dropped candidates, and warnings."
+        ),
     )
 
 
@@ -123,6 +130,12 @@ class PubMedSearchFilters(BaseModel):
         default=False,
         description="Restricts keywords to the Title field in the PubMed term.",
     )
+
+    # These are optional for now, but PubMed scoring already knows how to use them.
+    exact_gene_required: bool = False
+    exact_disease_required: bool = False
+    exact_phenotype_required: bool = False
+    exact_compound_required: bool = False
 
     sort: Literal["relevance", "pub_date", "Author", "JournalName"] = Field(
         default="relevance",
@@ -181,6 +194,7 @@ class LiteratureSearchRequest(BaseModel):
     filters: Optional[PubMedSearchFilters] = None
     normalized_bundle: Optional[NormalizationResponse] = None
 
+
 class LiteratureProvenance(BaseModel):
     source: str
     retrieved_at: Optional[str] = None
@@ -215,6 +229,7 @@ class StructuredEvidenceResult(BaseModel):
     compounds: Optional[List[NormalizedEntity]] = None
     trials: Optional[List[NormalizedEntity]] = None
     relationships: Optional[List[Dict[str, Any]]] = None
+
 
 class EvidenceGraph(BaseModel):
     """Aggregated evidence graph returned by `assemble_evidence_graph`."""

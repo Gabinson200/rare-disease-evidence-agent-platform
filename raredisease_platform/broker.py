@@ -2,6 +2,7 @@
 
 import asyncio
 import re
+import datetime
 from typing import Any, Dict, List, Optional, Sequence
 
 from .connectors import CONNECTOR_REGISTRY, get_connector
@@ -436,26 +437,68 @@ class Broker:
     ) -> NormalizationResponse:
         normalized_entities: Dict[str, NormalizedEntity] = {}
         alternative_candidates: Dict[str, NormalizedEntity] = {}
+        dropped_candidates: List[Dict[str, Any]] = []
+        connector_calls: List[Dict[str, Any]] = []
+        warnings: List[str] = []
 
         candidates = self._detect_candidate_spans(
             raw_query=raw_query,
             expected_entity_types=expected_entity_types,
         )
 
+        detected_candidates_trace = [
+            {
+                "surface_text": candidate["surface_text"],
+                "character_start": candidate["start"],
+                "character_end": candidate["end"],
+                "candidate_entity_types": [
+                    entity_type.value for entity_type in candidate["entity_types"]
+                ],
+                "strategy": candidate["strategy"],
+            }
+            for candidate in candidates
+        ]
+
+        if not candidates:
+            warnings.append("No candidate spans were detected; no normalization connectors were called.")
+
         async def call_normalizer(
             connector_name: str,
             candidate: Dict[str, Any],
-        ) -> List[NormalizedEntity]:
+        ) -> Dict[str, Any]:
             connector = get_connector(connector_name)
+            call_trace: Dict[str, Any] = {
+                "surface_text": candidate["surface_text"],
+                "candidate_entity_types": [
+                    entity_type.value for entity_type in candidate["entity_types"]
+                ],
+                "span_strategy": candidate["strategy"],
+                "connector": connector_name,
+                "status": "not_started",
+                "records_returned": 0,
+                "error": None,
+            }
+
             try:
                 records = await connector.normalize(candidate["surface_text"])
+                call_trace["status"] = "ok"
+                call_trace["records_returned"] = len(records or [])
             except NotImplementedError:
-                return []
-            except Exception:
-                return []
+                call_trace["status"] = "not_implemented"
+                return {
+                    "trace": call_trace,
+                    "entities": [],
+                }
+            except Exception as exc:
+                call_trace["status"] = "error"
+                call_trace["error"] = f"{type(exc).__name__}: {exc}"
+                return {
+                    "trace": call_trace,
+                    "entities": [],
+                }
 
             entities: List[NormalizedEntity] = []
-            for record in records:
+            for record in records or []:
                 try:
                     entity = NormalizedEntity.model_validate(record)
                     entity = self._annotate_entity_with_span(
@@ -464,45 +507,92 @@ class Broker:
                         connector_name=connector_name,
                     )
                     entities.append(entity)
-                except Exception:
-                    continue
+                except Exception as exc:
+                    dropped_candidates.append(
+                        {
+                            "surface_text": candidate["surface_text"],
+                            "connector": connector_name,
+                            "reason": "invalid_normalized_entity_record",
+                            "error": f"{type(exc).__name__}: {exc}",
+                            "raw_record_type": type(record).__name__,
+                        }
+                    )
 
-            return entities
+            return {
+                "trace": call_trace,
+                "entities": entities,
+            }
 
         tasks = []
         for candidate in candidates:
-            for connector_name in self._connectors_for_candidate(
+            routed_connectors = self._connectors_for_candidate(
                 candidate,
                 expected_entity_types=expected_entity_types,
-            ):
+            )
+
+            if not routed_connectors:
+                warnings.append(
+                    f"No connectors routed for candidate span '{candidate['surface_text']}'."
+                )
+
+            for connector_name in routed_connectors:
                 tasks.append(call_normalizer(connector_name, candidate))
 
-        if not tasks:
-            return NormalizationResponse(entities=[], alternatives=None)
+        result_groups = await asyncio.gather(*tasks) if tasks else []
 
-        result_groups = await asyncio.gather(*tasks)
+        threshold_decisions: List[Dict[str, Any]] = []
 
         for group in result_groups:
-            for entity in group:
+            connector_calls.append(group["trace"])
+
+            for entity in group["entities"]:
                 key = self._entity_dedupe_key(entity)
+                confidence = float(entity.confidence)
+
+                decision = {
+                    "entity_key": key,
+                    "entity_type": entity.entity_type.value,
+                    "preferred_label": entity.preferred_label,
+                    "confidence": confidence,
+                    "final_threshold": self.NORMALIZATION_FINAL_THRESHOLD,
+                    "alternative_threshold": self.NORMALIZATION_ALTERNATIVE_THRESHOLD,
+                    "decision": None,
+                }
 
                 if self._is_final_normalization_candidate(entity):
                     existing = normalized_entities.get(key)
                     if existing is None or entity.confidence > existing.confidence:
                         normalized_entities[key] = entity
+                        decision["decision"] = "final_entity"
+                    else:
+                        decision["decision"] = "duplicate_lower_confidence_final"
 
-                    # If something was previously only an alternative, remove it.
                     alternative_candidates.pop(key, None)
 
                 elif self._is_alternative_normalization_candidate(entity):
                     if key in normalized_entities:
-                        continue
+                        decision["decision"] = "already_has_final_entity"
+                    else:
+                        existing_alt = alternative_candidates.get(key)
+                        if existing_alt is None or entity.confidence > existing_alt.confidence:
+                            alternative_candidates[key] = entity
+                            decision["decision"] = "alternative_candidate"
+                        else:
+                            decision["decision"] = "duplicate_lower_confidence_alternative"
 
-                    existing_alt = alternative_candidates.get(key)
-                    if existing_alt is None or entity.confidence > existing_alt.confidence:
-                        alternative_candidates[key] = entity
+                else:
+                    decision["decision"] = "dropped_below_alternative_threshold"
+                    dropped_candidates.append(
+                        {
+                            "entity_key": key,
+                            "entity_type": entity.entity_type.value,
+                            "preferred_label": entity.preferred_label,
+                            "confidence": confidence,
+                            "reason": "below_alternative_threshold",
+                        }
+                    )
 
-                # Below alternative threshold: discard instead of silently surfacing.
+                threshold_decisions.append(decision)
 
         final_entities = sorted(
             normalized_entities.values(),
@@ -516,9 +606,29 @@ class Broker:
             reverse=True,
         )
 
+        normalization_trace = {
+            "raw_query": raw_query,
+            "expected_entity_types": [
+                entity_type.value for entity_type in expected_entity_types
+            ] if expected_entity_types else None,
+            "timestamp": datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z"),
+            "detected_candidates": detected_candidates_trace,
+            "connector_calls": connector_calls,
+            "thresholds": {
+                "final": self.NORMALIZATION_FINAL_THRESHOLD,
+                "alternative": self.NORMALIZATION_ALTERNATIVE_THRESHOLD,
+            },
+            "threshold_decisions": threshold_decisions,
+            "final_entity_count": len(final_entities),
+            "alternative_candidate_count": len(alternatives),
+            "dropped_candidates": dropped_candidates,
+            "warnings": warnings,
+        }
+
         return NormalizationResponse(
             entities=final_entities,
             alternatives=alternatives or None,
+            normalization_trace=normalization_trace,
         )
 
     async def normalize_gene(self, raw_gene: str) -> NormalizationResponse:
