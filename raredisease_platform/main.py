@@ -243,7 +243,7 @@ async def crosswalk_gene_identifier(
         "Search PubMed and Europe PMC using normalized identifiers, optional keyword constraints, "
         "and optional normalized entity bundles.\n\n"
         "If `normalized_bundle` is provided, the broker can derive disease, gene, phenotype, and "
-        "compound search terms from canonical entities and their synonyms before querying Europe PMC."
+        "compound search terms from canonical entities and their synonyms before querying PubMed and Europe PMC."
     ),
 )
 async def search_literature(
