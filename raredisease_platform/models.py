@@ -1,7 +1,7 @@
 """Pydantic models defining the core data structures used by the platform."""
 
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -110,7 +110,7 @@ class PubMedSearchFilters(BaseModel):
         default_factory=list,
         description="Language filters mapped into the PubMed query term.",
     )
-    language: Optional[str | List[str]] = Field(
+    language: Optional[Union[str, List[str]]] = Field(
         default=None,
         description="Backward-compatible alias for languages.",
     )
