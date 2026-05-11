@@ -1,0 +1,9 @@
+to start webserver backend:
+
+PS C:\Users\adamk\downloads\rare-disease-evidence-agent-platform> .\venv\Scripts\Activate.ps1
+
+(venv)PS C:\Users\adamk\downloads\rare-disease-evidence-agent-platform> python --version
+Python 3.11.7
+
+(venv) PS C:\Users\adamk\downloads\rare-disease-evidence-agent-platform> python -m uvicorn raredisease_platform.main:app --reload
+
