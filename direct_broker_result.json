@@ -1,0 +1,1518 @@
+{
+    "normalized_bundle":  {
+                              "entities":  [
+                                               {
+                                                   "entity_type":  "gene",
+                                                   "preferred_label":  "ACVR1",
+                                                   "source_ids":  {
+                                                                      "hgnc":  "HGNC:171",
+                                                                      "entrez":  "90",
+                                                                      "ensembl":  "ENSG00000115170",
+                                                                      "omim":  "102576",
+                                                                      "uniprot":  "Q04771"
+                                                                  },
+                                                   "synonyms":  [
+                                                                    "SKR1",
+                                                                    "ALK2",
+                                                                    "ACVR1A",
+                                                                    "ACVRLK2",
+                                                                    "activin A receptor, type I"
+                                                                ],
+                                                   "description":  "activin A receptor type 1",
+                                                   "confidence":  0.99,
+                                                   "provenance":  {
+                                                                      "source":  "hgnc",
+                                                                      "method":  "exact_symbol",
+                                                                      "query_text":  "ACVR1",
+                                                                      "status":  "Approved",
+                                                                      "url":  "https://rest.genenames.org/fetch/hgnc_id/171",
+                                                                      "normalization_span":  {
+                                                                                                 "surface_text":  "ACVR1",
+                                                                                                 "character_start":  65,
+                                                                                                 "character_end":  70,
+                                                                                                 "candidate_entity_types":  [
+                                                                                                                                "gene"
+                                                                                                                            ],
+                                                                                                 "span_strategy":  "gene_symbol_like",
+                                                                                                 "routed_connector":  "hgnc"
+                                                                                             }
+                                                                  }
+                                               },
+                                               {
+                                                   "entity_type":  "disease",
+                                                   "preferred_label":  "Fibrodysplasia ossificans progressiva",
+                                                   "source_ids":  {
+                                                                      "orpha":  "337",
+                                                                      "medgen_uid":  "4698",
+                                                                      "medgen":  "C0016037",
+                                                                      "mondo":  "MONDO:0007606"
+                                                                  },
+                                                   "synonyms":  [
+                                                                    "FOP",
+                                                                    "Myositis ossificans progressiva",
+                                                                    "Stone man syndrome"
+                                                                ],
+                                                   "description":  "Fibrodysplasia ossificans progressiva (FOP) is a severely disabling heritable disorder of connective tissue characterized by congenital malformations of the great toes and progressive heterotopic ossification that forms qualitatively normal bone in characteristic extraskeletal sites.",
+                                                   "confidence":  0.99,
+                                                   "provenance":  {
+                                                                      "source":  "orphadata",
+                                                                      "method":  "orphacodes_api",
+                                                                      "match_type":  "exact_name",
+                                                                      "query_text":  "fibrodysplasia ossificans progressiva",
+                                                                      "status":  "Active",
+                                                                      "typology":  "Disease",
+                                                                      "target_orpha":  null,
+                                                                      "classification":  {
+                                                                                             "ORPHAcode":  337,
+                                                                                             "Preferred term":  "Fibrodysplasia ossificans progressiva",
+                                                                                             "Date":  "2025-06-24 08:04:43",
+                                                                                             "Classification":  [
+                                                                                                                    {
+                                                                                                                        "ID of the classification":  147,
+                                                                                                                        "Name of the classification":  "Orphanet classification of rare developmental anomalies during embryogenesis"
+                                                                                                                    },
+                                                                                                                    {
+                                                                                                                        "ID of the classification":  156,
+                                                                                                                        "Name of the classification":  "Orphanet classification of rare genetic diseases"
+                                                                                                                    },
+                                                                                                                    {
+                                                                                                                        "ID of the classification":  181,
+                                                                                                                        "Name of the classification":  "Orphanet classification of rare neurological diseases"
+                                                                                                                    },
+                                                                                                                    {
+                                                                                                                        "ID of the classification":  187,
+                                                                                                                        "Name of the classification":  "Orphanet classification of rare skin diseases"
+                                                                                                                    },
+                                                                                                                    {
+                                                                                                                        "ID of the classification":  199,
+                                                                                                                        "Name of the classification":  "Orphanet classification of rare bone diseases"
+                                                                                                                    }
+                                                                                                                ]
+                                                                                         },
+                                                                      "url":  "https://api.orphacode.org/EN/ClinicalEntity/orphacode/337/Name",
+                                                                      "crosswalks":  {
+                                                                                         "mesh":  null,
+                                                                                         "medgen":  {
+                                                                                                        "uid":  "4698",
+                                                                                                        "cui":  "C0016037",
+                                                                                                        "title":  "Progressive myositis ossificans",
+                                                                                                        "mondo_candidates":  [
+                                                                                                                                 "MONDO:0007606"
+                                                                                                                             ]
+                                                                                                    },
+                                                                                         "mondo":  {
+                                                                                                       "mondo":  "MONDO:0007606",
+                                                                                                       "label":  null,
+                                                                                                       "method":  "medgen_summary"
+                                                                                                   }
+                                                                                     },
+                                                                      "normalization_span":  {
+                                                                                                 "surface_text":  "fibrodysplasia ossificans progressiva",
+                                                                                                 "character_start":  17,
+                                                                                                 "character_end":  54,
+                                                                                                 "candidate_entity_types":  [
+                                                                                                                                "disease"
+                                                                                                                            ],
+                                                                                                 "span_strategy":  "biomedical_phrase",
+                                                                                                 "routed_connector":  "orphadata"
+                                                                                             }
+                                                                  }
+                                               }
+                                           ],
+                              "alternatives":  [
+                                                   {
+                                                       "entity_type":  "disease",
+                                                       "preferred_label":  "Erythrokeratoderma variabilis progressiva",
+                                                       "source_ids":  {
+                                                                          "orpha":  "308166",
+                                                                          "mondo":  "MONDO:0030941"
+                                                                      },
+                                                       "synonyms":  [
+
+                                                                    ],
+                                                       "description":  "Erythrokeratoderma variabilis progressiva (EKVP) is a type of erythrokeratoderma characterized by the association of hyperkeratosis and erythema in persistent, although sometimes variable, circumscribed lesions. Progressive symmetric erythrokeratoderma (PSEK) and erythrokeratoderma variabilis (EKV) are probably no longer two distinctive diseases but rather the two clinical manifestations of a same disease, now known as EKVP.",
+                                                       "confidence":  0.7799999999999999,
+                                                       "provenance":  {
+                                                                          "source":  "orphadata",
+                                                                          "method":  "orphacodes_api",
+                                                                          "match_type":  "approximate_name",
+                                                                          "query_text":  "fibrodysplasia ossificans progressiva",
+                                                                          "status":  "Active",
+                                                                          "typology":  "Clinical group",
+                                                                          "target_orpha":  null,
+                                                                          "classification":  {
+                                                                                                 "ORPHAcode":  308166,
+                                                                                                 "Preferred term":  "Erythrokeratoderma variabilis progressiva",
+                                                                                                 "Date":  "2025-06-24 08:04:43",
+                                                                                                 "Classification":  [
+                                                                                                                        {
+                                                                                                                            "ID of the classification":  156,
+                                                                                                                            "Name of the classification":  "Orphanet classification of rare genetic diseases"
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                            "ID of the classification":  187,
+                                                                                                                            "Name of the classification":  "Orphanet classification of rare skin diseases"
+                                                                                                                        }
+                                                                                                                    ]
+                                                                                             },
+                                                                          "url":  "https://api.orphacode.org/EN/ClinicalEntity/orphacode/308166/Name",
+                                                                          "crosswalks":  {
+                                                                                             "mesh":  null,
+                                                                                             "medgen":  null,
+                                                                                             "mondo":  {
+                                                                                                           "mondo":  "MONDO:0030941",
+                                                                                                           "label":  "erythrokeratodermia variabilis et progressiva 7",
+                                                                                                           "method":  "ols_search",
+                                                                                                           "raw_record":  {
+                                                                                                                              "iri":  "http://purl.obolibrary.org/obo/MONDO_0030941",
+                                                                                                                              "ontology_name":  "mondo",
+                                                                                                                              "ontology_prefix":  "MONDO",
+                                                                                                                              "short_form":  "MONDO_0030941",
+                                                                                                                              "description":  [
+
+                                                                                                                                              ],
+                                                                                                                              "label":  "erythrokeratodermia variabilis et progressiva 7",
+                                                                                                                              "obo_id":  "MONDO:0030941",
+                                                                                                                              "type":  "class",
+                                                                                                                              "exact_synonyms":  [
+                                                                                                                                                     "EKVP7",
+                                                                                                                                                     "erythrokeratodermia variabilis et progressiva 7"
+                                                                                                                                                 ]
+                                                                                                                          }
+                                                                                                       }
+                                                                                         },
+                                                                          "normalization_span":  {
+                                                                                                     "surface_text":  "fibrodysplasia ossificans progressiva",
+                                                                                                     "character_start":  17,
+                                                                                                     "character_end":  54,
+                                                                                                     "candidate_entity_types":  [
+                                                                                                                                    "disease"
+                                                                                                                                ],
+                                                                                                     "span_strategy":  "biomedical_phrase",
+                                                                                                     "routed_connector":  "orphadata"
+                                                                                                 }
+                                                                      }
+                                                   },
+                                                   {
+                                                       "entity_type":  "disease",
+                                                       "preferred_label":  "Progressive supranuclear palsy",
+                                                       "source_ids":  {
+                                                                          "orpha":  "683",
+                                                                          "medgen_uid":  "21026",
+                                                                          "medgen":  "C0038868",
+                                                                          "mondo":  "MONDO:0019037"
+                                                                      },
+                                                       "synonyms":  [
+                                                                        "PSP syndrome"
+                                                                    ],
+                                                       "description":  "A rare late-onset neurodegenerative disease characterized by ocular motor dysfunction, postural instability, akinesia-rigidity, and cognitive dysfunction.",
+                                                       "confidence":  0.74,
+                                                       "provenance":  {
+                                                                          "source":  "orphadata",
+                                                                          "method":  "orphacodes_api",
+                                                                          "match_type":  "approximate_name",
+                                                                          "query_text":  "fibrodysplasia ossificans progressiva",
+                                                                          "status":  "Active",
+                                                                          "typology":  "Disease",
+                                                                          "target_orpha":  null,
+                                                                          "classification":  {
+                                                                                                 "ORPHAcode":  683,
+                                                                                                 "Preferred term":  "Progressive supranuclear palsy",
+                                                                                                 "Date":  "2025-06-24 08:04:43",
+                                                                                                 "Classification":  [
+                                                                                                                        {
+                                                                                                                            "ID of the classification":  156,
+                                                                                                                            "Name of the classification":  "Orphanet classification of rare genetic diseases"
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                            "ID of the classification":  181,
+                                                                                                                            "Name of the classification":  "Orphanet classification of rare neurological diseases"
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                            "ID of the classification":  189,
+                                                                                                                            "Name of the classification":  "Orphanet classification of rare ophthalmic disorders"
+                                                                                                                        }
+                                                                                                                    ]
+                                                                                             },
+                                                                          "url":  "https://api.orphacode.org/EN/ClinicalEntity/orphacode/683/Name",
+                                                                          "crosswalks":  {
+                                                                                             "mesh":  null,
+                                                                                             "medgen":  {
+                                                                                                            "uid":  "21026",
+                                                                                                            "cui":  "C0038868",
+                                                                                                            "title":  "Progressive supranuclear palsy",
+                                                                                                            "mondo_candidates":  [
+                                                                                                                                     "MONDO:0019037"
+                                                                                                                                 ]
+                                                                                                        },
+                                                                                             "mondo":  {
+                                                                                                           "mondo":  "MONDO:0019037",
+                                                                                                           "label":  null,
+                                                                                                           "method":  "medgen_summary"
+                                                                                                       }
+                                                                                         },
+                                                                          "normalization_span":  {
+                                                                                                     "surface_text":  "fibrodysplasia ossificans progressiva",
+                                                                                                     "character_start":  17,
+                                                                                                     "character_end":  54,
+                                                                                                     "candidate_entity_types":  [
+                                                                                                                                    "disease"
+                                                                                                                                ],
+                                                                                                     "span_strategy":  "biomedical_phrase",
+                                                                                                     "routed_connector":  "orphadata"
+                                                                                                 }
+                                                                      }
+                                                   },
+                                                   {
+                                                       "entity_type":  "disease",
+                                                       "preferred_label":  "Progressive pseudorheumatoid dysplasia",
+                                                       "source_ids":  {
+                                                                          "orpha":  "1159",
+                                                                          "medgen_uid":  "96581",
+                                                                          "medgen":  "C0432215",
+                                                                          "mondo":  "MONDO:0008827"
+                                                                      },
+                                                       "synonyms":  [
+                                                                        "PPD",
+                                                                        "Progressive pseudorheumatoid arthropathy of childhood",
+                                                                        "Spondyloepiphyseal dysplasia tarda-progressive arthropathy syndrome"
+                                                                    ],
+                                                       "description":  "A rare spondyloepiphyseal dysplasia (SED) characterized by an association with progressive arthropathy.",
+                                                       "confidence":  0.7,
+                                                       "provenance":  {
+                                                                          "source":  "orphadata",
+                                                                          "method":  "orphacodes_api",
+                                                                          "match_type":  "approximate_name",
+                                                                          "query_text":  "fibrodysplasia ossificans progressiva",
+                                                                          "status":  "Active",
+                                                                          "typology":  "Disease",
+                                                                          "target_orpha":  null,
+                                                                          "classification":  {
+                                                                                                 "ORPHAcode":  1159,
+                                                                                                 "Preferred term":  "Progressive pseudorheumatoid dysplasia",
+                                                                                                 "Date":  "2025-06-24 08:04:43",
+                                                                                                 "Classification":  [
+                                                                                                                        {
+                                                                                                                            "ID of the classification":  147,
+                                                                                                                            "Name of the classification":  "Orphanet classification of rare developmental anomalies during embryogenesis"
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                            "ID of the classification":  156,
+                                                                                                                            "Name of the classification":  "Orphanet classification of rare genetic diseases"
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                            "ID of the classification":  199,
+                                                                                                                            "Name of the classification":  "Orphanet classification of rare bone diseases"
+                                                                                                                        }
+                                                                                                                    ]
+                                                                                             },
+                                                                          "url":  "https://api.orphacode.org/EN/ClinicalEntity/orphacode/1159/Name",
+                                                                          "crosswalks":  {
+                                                                                             "mesh":  null,
+                                                                                             "medgen":  {
+                                                                                                            "uid":  "96581",
+                                                                                                            "cui":  "C0432215",
+                                                                                                            "title":  "Progressive pseudorheumatoid dysplasia",
+                                                                                                            "mondo_candidates":  [
+                                                                                                                                     "MONDO:0008827"
+                                                                                                                                 ]
+                                                                                                        },
+                                                                                             "mondo":  {
+                                                                                                           "mondo":  "MONDO:0008827",
+                                                                                                           "label":  null,
+                                                                                                           "method":  "medgen_summary"
+                                                                                                       }
+                                                                                         },
+                                                                          "normalization_span":  {
+                                                                                                     "surface_text":  "fibrodysplasia ossificans progressiva",
+                                                                                                     "character_start":  17,
+                                                                                                     "character_end":  54,
+                                                                                                     "candidate_entity_types":  [
+                                                                                                                                    "disease"
+                                                                                                                                ],
+                                                                                                     "span_strategy":  "biomedical_phrase",
+                                                                                                     "routed_connector":  "orphadata"
+                                                                                                 }
+                                                                      }
+                                                   },
+                                                   {
+                                                       "entity_type":  "disease",
+                                                       "preferred_label":  "Progressive hemifacial atrophy",
+                                                       "source_ids":  {
+                                                                          "orpha":  "1214",
+                                                                          "medgen_uid":  "8761",
+                                                                          "medgen":  "C0015458",
+                                                                          "mondo":  "MONDO:0007710"
+                                                                      },
+                                                       "synonyms":  [
+                                                                        "Hemifacial atrophy",
+                                                                        "PHA",
+                                                                        "Parry-Romberg syndrome",
+                                                                        "Progressive facial hemiatrophy",
+                                                                        "Romberg syndrome"
+                                                                    ],
+                                                       "description":  "Progressive hemifacial atrophy (PHA) is a rare acquired disorder, characterized by unilateral slowly progressive atrophy of the skin and soft tissues of half of the face leading to a sunken appearance. Muscles, cartilage and the underlying bony structures may also be involved.",
+                                                       "confidence":  0.6599999999999999,
+                                                       "provenance":  {
+                                                                          "source":  "orphadata",
+                                                                          "method":  "orphacodes_api",
+                                                                          "match_type":  "approximate_name",
+                                                                          "query_text":  "fibrodysplasia ossificans progressiva",
+                                                                          "status":  "Active",
+                                                                          "typology":  "Disease",
+                                                                          "target_orpha":  null,
+                                                                          "classification":  {
+                                                                                                 "ORPHAcode":  1214,
+                                                                                                 "Preferred term":  "Progressive hemifacial atrophy",
+                                                                                                 "Date":  "2025-06-24 08:04:43",
+                                                                                                 "Classification":  [
+                                                                                                                        {
+                                                                                                                            "ID of the classification":  181,
+                                                                                                                            "Name of the classification":  "Orphanet classification of rare neurological diseases"
+                                                                                                                        }
+                                                                                                                    ]
+                                                                                             },
+                                                                          "url":  "https://api.orphacode.org/EN/ClinicalEntity/orphacode/1214/Name",
+                                                                          "crosswalks":  {
+                                                                                             "mesh":  null,
+                                                                                             "medgen":  {
+                                                                                                            "uid":  "8761",
+                                                                                                            "cui":  "C0015458",
+                                                                                                            "title":  "Facial hemiatrophy",
+                                                                                                            "mondo_candidates":  [
+                                                                                                                                     "MONDO:0007710"
+                                                                                                                                 ]
+                                                                                                        },
+                                                                                             "mondo":  {
+                                                                                                           "mondo":  "MONDO:0007710",
+                                                                                                           "label":  null,
+                                                                                                           "method":  "medgen_summary"
+                                                                                                       }
+                                                                                         },
+                                                                          "normalization_span":  {
+                                                                                                     "surface_text":  "fibrodysplasia ossificans progressiva",
+                                                                                                     "character_start":  17,
+                                                                                                     "character_end":  54,
+                                                                                                     "candidate_entity_types":  [
+                                                                                                                                    "disease"
+                                                                                                                                ],
+                                                                                                     "span_strategy":  "biomedical_phrase",
+                                                                                                     "routed_connector":  "orphadata"
+                                                                                                 }
+                                                                      }
+                                                   }
+                                               ],
+                              "normalization_trace":  {
+                                                          "raw_query":  "case reports for fibrodysplasia ossificans progressiva involving ACVR1",
+                                                          "expected_entity_types":  [
+                                                                                        "disease",
+                                                                                        "gene"
+                                                                                    ],
+                                                          "timestamp":  "2026-05-12T06:38:26.517888Z",
+                                                          "detected_candidates":  [
+                                                                                      {
+                                                                                          "surface_text":  "ACVR1",
+                                                                                          "character_start":  65,
+                                                                                          "character_end":  70,
+                                                                                          "candidate_entity_types":  [
+                                                                                                                         "gene"
+                                                                                                                     ],
+                                                                                          "strategy":  "gene_symbol_like"
+                                                                                      },
+                                                                                      {
+                                                                                          "surface_text":  "fibrodysplasia ossificans progressiva",
+                                                                                          "character_start":  17,
+                                                                                          "character_end":  54,
+                                                                                          "candidate_entity_types":  [
+                                                                                                                         "disease"
+                                                                                                                     ],
+                                                                                          "strategy":  "biomedical_phrase"
+                                                                                      }
+                                                                                  ],
+                                                          "connector_calls":  [
+                                                                                  {
+                                                                                      "surface_text":  "ACVR1",
+                                                                                      "candidate_entity_types":  [
+                                                                                                                     "gene"
+                                                                                                                 ],
+                                                                                      "span_strategy":  "gene_symbol_like",
+                                                                                      "connector":  "hgnc",
+                                                                                      "status":  "ok",
+                                                                                      "records_returned":  1,
+                                                                                      "error":  null
+                                                                                  },
+                                                                                  {
+                                                                                      "surface_text":  "fibrodysplasia ossificans progressiva",
+                                                                                      "candidate_entity_types":  [
+                                                                                                                     "disease"
+                                                                                                                 ],
+                                                                                      "span_strategy":  "biomedical_phrase",
+                                                                                      "connector":  "orphadata",
+                                                                                      "status":  "ok",
+                                                                                      "records_returned":  5,
+                                                                                      "error":  null
+                                                                                  }
+                                                                              ],
+                                                          "thresholds":  {
+                                                                             "final":  0.9,
+                                                                             "alternative":  0.65
+                                                                         },
+                                                          "threshold_decisions":  [
+                                                                                      {
+                                                                                          "entity_key":  "EntityType.gene:hgnc:HGNC:171",
+                                                                                          "entity_type":  "gene",
+                                                                                          "preferred_label":  "ACVR1",
+                                                                                          "confidence":  0.99,
+                                                                                          "final_threshold":  0.9,
+                                                                                          "alternative_threshold":  0.65,
+                                                                                          "decision":  "final_entity"
+                                                                                      },
+                                                                                      {
+                                                                                          "entity_key":  "EntityType.disease:orpha:337",
+                                                                                          "entity_type":  "disease",
+                                                                                          "preferred_label":  "Fibrodysplasia ossificans progressiva",
+                                                                                          "confidence":  0.99,
+                                                                                          "final_threshold":  0.9,
+                                                                                          "alternative_threshold":  0.65,
+                                                                                          "decision":  "final_entity"
+                                                                                      },
+                                                                                      {
+                                                                                          "entity_key":  "EntityType.disease:orpha:308166",
+                                                                                          "entity_type":  "disease",
+                                                                                          "preferred_label":  "Erythrokeratoderma variabilis progressiva",
+                                                                                          "confidence":  0.7799999999999999,
+                                                                                          "final_threshold":  0.9,
+                                                                                          "alternative_threshold":  0.65,
+                                                                                          "decision":  "alternative_candidate"
+                                                                                      },
+                                                                                      {
+                                                                                          "entity_key":  "EntityType.disease:orpha:683",
+                                                                                          "entity_type":  "disease",
+                                                                                          "preferred_label":  "Progressive supranuclear palsy",
+                                                                                          "confidence":  0.74,
+                                                                                          "final_threshold":  0.9,
+                                                                                          "alternative_threshold":  0.65,
+                                                                                          "decision":  "alternative_candidate"
+                                                                                      },
+                                                                                      {
+                                                                                          "entity_key":  "EntityType.disease:orpha:1159",
+                                                                                          "entity_type":  "disease",
+                                                                                          "preferred_label":  "Progressive pseudorheumatoid dysplasia",
+                                                                                          "confidence":  0.7,
+                                                                                          "final_threshold":  0.9,
+                                                                                          "alternative_threshold":  0.65,
+                                                                                          "decision":  "alternative_candidate"
+                                                                                      },
+                                                                                      {
+                                                                                          "entity_key":  "EntityType.disease:orpha:1214",
+                                                                                          "entity_type":  "disease",
+                                                                                          "preferred_label":  "Progressive hemifacial atrophy",
+                                                                                          "confidence":  0.6599999999999999,
+                                                                                          "final_threshold":  0.9,
+                                                                                          "alternative_threshold":  0.65,
+                                                                                          "decision":  "alternative_candidate"
+                                                                                      }
+                                                                                  ],
+                                                          "final_entity_count":  2,
+                                                          "alternative_candidate_count":  4,
+                                                          "dropped_candidates":  [
+
+                                                                                 ],
+                                                          "warnings":  [
+
+                                                                       ]
+                                                      }
+                          },
+    "literature_results":  [
+                               {
+                                   "pmid":  "40663969",
+                                   "pmcid":  "PMC12281004",
+                                   "doi":  "10.1016/j.ijscr.2025.111652",
+                                   "title":  "Atypical Fibrodysplasia Ossificans Progressiva in a child: A case report.",
+                                   "abstract":  "\u003ch4\u003eIntroduction and importance\u003c/h4\u003eFibrodysplasia Ossificans Progressiva (FOP) is an exceptionally rare genetic disorder characterized by progressive heterotopic ossification of soft tissues and congenital skeletal anomalies.\u003ch4\u003eCase presentation\u003c/h4\u003eThis report presents the case of a 12-year-old boy with hallmark features of FOP alongside rare congenital abnormalities, including bilateral microdactyly and thumb adhesion to the palms.\u003ch4\u003eClinical discussion\u003c/h4\u003eInitially misdiagnosed as muscular dystrophy, the patient\u0027s condition deteriorated under inappropriate management. Genetic testing confirmed a heterozygous mutation (c.617G \u003e A; p.R206H) in the ACVR1 gene.\u003ch4\u003eConclusion\u003c/h4\u003eThis case highlights the importance of early recognition of atypical congenital malformations in FOP, the risks of invasive interventions, and the necessity for genetic confirmation to prevent iatrogenic harm. A comprehensive review of the literature is also provided.",
+                                   "year":  2025,
+                                   "journal":  null,
+                                   "authors":  [
+                                                   "Noufal A",
+                                                   "Alsharef Y",
+                                                   "Alainein AA",
+                                                   "Adi M",
+                                                   "Jumaa A",
+                                                   "Alfandi A."
+                                               ],
+                                   "match_features":  {
+                                                          "exact_disease_id":  false,
+                                                          "exact_gene_id":  false,
+                                                          "phenotype_overlap_strength":  null,
+                                                          "mesh_topic_importance":  null,
+                                                          "title_match_strength":  1.0,
+                                                          "abstract_match_strength":  1.0,
+                                                          "publication_type":  null,
+                                                          "recency":  0.9333,
+                                                          "full_text_available":  true,
+                                                          "source_trust_level":  0.85
+                                                      },
+                                   "score":  0.89,
+                                   "provenance":  {
+                                                      "source":  "europepmc",
+                                                      "retrieved_at":  "2026-05-12T06:38:28.001717Z",
+                                                      "raw_record":  {
+                                                                         "id":  "40663969",
+                                                                         "source":  "MED",
+                                                                         "pmid":  "40663969",
+                                                                         "pmcid":  "PMC12281004",
+                                                                         "fullTextIdList":  {
+                                                                                                "fullTextId":  [
+                                                                                                                   "PMC12281004"
+                                                                                                               ]
+                                                                                            },
+                                                                         "doi":  "10.1016/j.ijscr.2025.111652",
+                                                                         "title":  "Atypical Fibrodysplasia Ossificans Progressiva in a child: A case report.",
+                                                                         "authorString":  "Noufal A, Alsharef Y, Alainein AA, Adi M, Jumaa A, Alfandi A.",
+                                                                         "authorList":  {
+                                                                                            "author":  [
+                                                                                                           {
+                                                                                                               "fullName":  "Noufal A",
+                                                                                                               "firstName":  "Abdullah",
+                                                                                                               "lastName":  "Noufal",
+                                                                                                               "initials":  "A",
+                                                                                                               "authorAffiliationDetailsList":  {
+                                                                                                                                                    "authorAffiliation":  ""
+                                                                                                                                                }
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "fullName":  "Alsharef Y",
+                                                                                                               "firstName":  "Yaman",
+                                                                                                               "lastName":  "Alsharef",
+                                                                                                               "initials":  "Y",
+                                                                                                               "authorAffiliationDetailsList":  {
+                                                                                                                                                    "authorAffiliation":  ""
+                                                                                                                                                }
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "fullName":  "Alainein AA",
+                                                                                                               "firstName":  "Aya Abou",
+                                                                                                               "lastName":  "Alainein",
+                                                                                                               "initials":  "AA",
+                                                                                                               "authorAffiliationDetailsList":  {
+                                                                                                                                                    "authorAffiliation":  ""
+                                                                                                                                                }
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "fullName":  "Adi M",
+                                                                                                               "firstName":  "Mohammad",
+                                                                                                               "lastName":  "Adi",
+                                                                                                               "initials":  "M",
+                                                                                                               "authorAffiliationDetailsList":  {
+                                                                                                                                                    "authorAffiliation":  ""
+                                                                                                                                                }
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "fullName":  "Jumaa A",
+                                                                                                               "firstName":  "Ali",
+                                                                                                               "lastName":  "Jumaa",
+                                                                                                               "initials":  "A",
+                                                                                                               "authorAffiliationDetailsList":  {
+                                                                                                                                                    "authorAffiliation":  ""
+                                                                                                                                                }
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "fullName":  "Alfandi A",
+                                                                                                               "firstName":  "Abdullah",
+                                                                                                               "lastName":  "Alfandi",
+                                                                                                               "initials":  "A",
+                                                                                                               "authorAffiliationDetailsList":  {
+                                                                                                                                                    "authorAffiliation":  ""
+                                                                                                                                                }
+                                                                                                           }
+                                                                                                       ]
+                                                                                        },
+                                                                         "journalInfo":  {
+                                                                                             "volume":  "133",
+                                                                                             "journalIssueId":  3984110,
+                                                                                             "dateOfPublication":  "2025 Aug",
+                                                                                             "monthOfPublication":  8,
+                                                                                             "yearOfPublication":  2025,
+                                                                                             "printPublicationDate":  "2025-08-01",
+                                                                                             "journal":  {
+                                                                                                             "title":  "International journal of surgery case reports",
+                                                                                                             "medlineAbbreviation":  "Int J Surg Case Rep",
+                                                                                                             "essn":  "2210-2612",
+                                                                                                             "issn":  "2210-2612",
+                                                                                                             "nlmid":  "101529872",
+                                                                                                             "isoabbreviation":  "Int J Surg Case Rep"
+                                                                                                         }
+                                                                                         },
+                                                                         "pubYear":  "2025",
+                                                                         "pageInfo":  "111652",
+                                                                         "abstractText":  "\u003ch4\u003eIntroduction and importance\u003c/h4\u003eFibrodysplasia Ossificans Progressiva (FOP) is an exceptionally rare genetic disorder characterized by progressive heterotopic ossification of soft tissues and congenital skeletal anomalies.\u003ch4\u003eCase presentation\u003c/h4\u003eThis report presents the case of a 12-year-old boy with hallmark features of FOP alongside rare congenital abnormalities, including bilateral microdactyly and thumb adhesion to the palms.\u003ch4\u003eClinical discussion\u003c/h4\u003eInitially misdiagnosed as muscular dystrophy, the patient\u0027s condition deteriorated under inappropriate management. Genetic testing confirmed a heterozygous mutation (c.617G \u003e A; p.R206H) in the ACVR1 gene.\u003ch4\u003eConclusion\u003c/h4\u003eThis case highlights the importance of early recognition of atypical congenital malformations in FOP, the risks of invasive interventions, and the necessity for genetic confirmation to prevent iatrogenic harm. A comprehensive review of the literature is also provided.",
+                                                                         "affiliation":  "ASPU (AlSham Private University), Damascus, Syria. Electronic address: abdullahanoufal@gmail.com.",
+                                                                         "publicationStatus":  "ppublish",
+                                                                         "language":  "eng",
+                                                                         "pubModel":  "Print-Electronic",
+                                                                         "pubTypeList":  {
+                                                                                             "pubType":  [
+                                                                                                             "Journal Article",
+                                                                                                             "Case Reports",
+                                                                                                             "case-report"
+                                                                                                         ]
+                                                                                         },
+                                                                         "keywordList":  {
+                                                                                             "keyword":  [
+                                                                                                             "Genetic mutation",
+                                                                                                             "Case Report",
+                                                                                                             "Heterotopic Ossification",
+                                                                                                             "Acvr1 Gene",
+                                                                                                             "Fibrodysplasia Ossificans Progressiva (Fop)"
+                                                                                                         ]
+                                                                                         },
+                                                                         "fullTextUrlList":  {
+                                                                                                 "fullTextUrl":  [
+                                                                                                                     {
+                                                                                                                         "availability":  "Subscription required",
+                                                                                                                         "availabilityCode":  "S",
+                                                                                                                         "documentStyle":  "doi",
+                                                                                                                         "site":  "DOI",
+                                                                                                                         "url":  "https://doi.org/10.1016/j.ijscr.2025.111652"
+                                                                                                                     },
+                                                                                                                     {
+                                                                                                                         "availability":  "Open access",
+                                                                                                                         "availabilityCode":  "OA",
+                                                                                                                         "documentStyle":  "html",
+                                                                                                                         "site":  "Europe_PMC",
+                                                                                                                         "url":  "https://europepmc.org/articles/PMC12281004"
+                                                                                                                     },
+                                                                                                                     {
+                                                                                                                         "availability":  "Open access",
+                                                                                                                         "availabilityCode":  "OA",
+                                                                                                                         "documentStyle":  "pdf",
+                                                                                                                         "site":  "Europe_PMC",
+                                                                                                                         "url":  "https://europepmc.org/articles/PMC12281004?pdf=render"
+                                                                                                                     }
+                                                                                                                 ]
+                                                                                             },
+                                                                         "isOpenAccess":  "Y",
+                                                                         "inEPMC":  "Y",
+                                                                         "inPMC":  "Y",
+                                                                         "hasPDF":  "Y",
+                                                                         "hasBook":  "N",
+                                                                         "hasSuppl":  "N",
+                                                                         "citedByCount":  0,
+                                                                         "hasData":  "N",
+                                                                         "hasReferences":  "Y",
+                                                                         "hasTextMinedTerms":  "Y",
+                                                                         "hasDbCrossReferences":  "N",
+                                                                         "hasLabsLinks":  "N",
+                                                                         "license":  "cc by-nc-nd",
+                                                                         "hasEvaluations":  "N",
+                                                                         "authMan":  "N",
+                                                                         "epmcAuthMan":  "N",
+                                                                         "nihAuthMan":  "N",
+                                                                         "hasTMAccessionNumbers":  "N",
+                                                                         "dateOfCreation":  "2025-07-15",
+                                                                         "firstIndexDate":  "2025-07-16",
+                                                                         "fullTextReceivedDate":  "2025-12-03",
+                                                                         "dateOfRevision":  "2025-07-29",
+                                                                         "electronicPublicationDate":  "2025-07-10",
+                                                                         "firstPublicationDate":  "2025-07-10"
+                                                                     }
+                                                  }
+                               },
+                               {
+                                   "pmid":  "36642816",
+                                   "pmcid":  null,
+                                   "doi":  "10.1111/neup.12892",
+                                   "title":  "Midline brain hamartomatous lesions in fibrodysplasia ossificans progressiva with ACVR1 mutations.",
+                                   "abstract":  "Fibrodysplasia ossificans progressiva (FOP) is a rare genetic disorder characterized by extensive heterotopic ossification of soft tissue structures leading to severe limitations in movement. FOP is caused by a germline mutation in the activating receptor type IA (ACVR1) gene. Worrisome is the fact that up to a third of diffuse intrinsic pontine gliomas (DIPG) also harbor the same point mutation in ACVR1. Radiological reports of central nervous system (CNS) involvement by FOP have described brainstem masses; however, the literature on the histopathology or pathogenesis of these lesions is scant. Here we present detailed neuropathologic findings of a brainstem mass in a patient with FOP and suggest that the tumor is hamartomatous in nature. This report, along with a literature review of radiographic and laboratory data, offers support for the idea that the ACVR1 mutation may incite CNS proliferation, predominantly in the brainstem, but is probably not an oncologic driver. These lesions may be seen at autopsy and are likely noncontributory to death.",
+                                   "year":  2023,
+                                   "journal":  "Neuropathology : official journal of the Japanese Society of Neuropathology",
+                                   "authors":  [
+                                                   "Kresak JL",
+                                                   "Walsh M",
+                                                   "Tuzzolo A",
+                                                   "Ordulu Z",
+                                                   "Gregory J"
+                                               ],
+                                   "match_features":  {
+                                                          "exact_disease_id":  true,
+                                                          "exact_gene_id":  true,
+                                                          "phenotype_overlap_strength":  null,
+                                                          "mesh_topic_importance":  null,
+                                                          "title_match_strength":  0.0,
+                                                          "abstract_match_strength":  0.5,
+                                                          "publication_type":  "Review, Case Reports, Journal Article",
+                                                          "recency":  0.8,
+                                                          "full_text_available":  false,
+                                                          "source_trust_level":  0.9
+                                                      },
+                                   "score":  0.5,
+                                   "provenance":  {
+                                                      "source":  "pubmed",
+                                                      "retrieved_at":  "2026-05-12T06:38:28.617486Z",
+                                                      "raw_record":  {
+                                                                         "esummary":  {
+                                                                                          "uid":  "36642816",
+                                                                                          "pubdate":  "2023 Aug",
+                                                                                          "epubdate":  "2023 Jan 15",
+                                                                                          "source":  "Neuropathology",
+                                                                                          "authors":  [
+                                                                                                          {
+                                                                                                              "name":  "Kresak JL",
+                                                                                                              "authtype":  "Author",
+                                                                                                              "clusterid":  ""
+                                                                                                          },
+                                                                                                          {
+                                                                                                              "name":  "Walsh M",
+                                                                                                              "authtype":  "Author",
+                                                                                                              "clusterid":  ""
+                                                                                                          },
+                                                                                                          {
+                                                                                                              "name":  "Tuzzolo A",
+                                                                                                              "authtype":  "Author",
+                                                                                                              "clusterid":  ""
+                                                                                                          },
+                                                                                                          {
+                                                                                                              "name":  "Ordulu Z",
+                                                                                                              "authtype":  "Author",
+                                                                                                              "clusterid":  ""
+                                                                                                          },
+                                                                                                          {
+                                                                                                              "name":  "Gregory J",
+                                                                                                              "authtype":  "Author",
+                                                                                                              "clusterid":  ""
+                                                                                                          }
+                                                                                                      ],
+                                                                                          "lastauthor":  "Gregory J",
+                                                                                          "title":  "Midline brain hamartomatous lesions in fibrodysplasia ossificans progressiva with ACVR1 mutations.",
+                                                                                          "sorttitle":  "midline brain hamartomatous lesions in fibrodysplasia ossificans progressiva with acvr1 mutations",
+                                                                                          "volume":  "43",
+                                                                                          "issue":  "4",
+                                                                                          "pages":  "333-339",
+                                                                                          "lang":  [
+                                                                                                       "eng"
+                                                                                                   ],
+                                                                                          "nlmuniqueid":  "9606526",
+                                                                                          "issn":  "0919-6544",
+                                                                                          "essn":  "1440-1789",
+                                                                                          "pubtype":  [
+                                                                                                          "Review",
+                                                                                                          "Case Reports",
+                                                                                                          "Journal Article"
+                                                                                                      ],
+                                                                                          "recordstatus":  "PubMed - indexed for MEDLINE",
+                                                                                          "pubstatus":  "256",
+                                                                                          "articleids":  [
+                                                                                                             {
+                                                                                                                 "idtype":  "pubmed",
+                                                                                                                 "idtypen":  1,
+                                                                                                                 "value":  "36642816"
+                                                                                                             },
+                                                                                                             {
+                                                                                                                 "idtype":  "doi",
+                                                                                                                 "idtypen":  3,
+                                                                                                                 "value":  "10.1111/neup.12892"
+                                                                                                             }
+                                                                                                         ],
+                                                                                          "history":  [
+                                                                                                          {
+                                                                                                              "pubstatus":  "revised",
+                                                                                                              "date":  "2022/12/16 00:00"
+                                                                                                          },
+                                                                                                          {
+                                                                                                              "pubstatus":  "received",
+                                                                                                              "date":  "2022/08/29 00:00"
+                                                                                                          },
+                                                                                                          {
+                                                                                                              "pubstatus":  "accepted",
+                                                                                                              "date":  "2022/12/19 00:00"
+                                                                                                          },
+                                                                                                          {
+                                                                                                              "pubstatus":  "medline",
+                                                                                                              "date":  "2023/08/03 06:43"
+                                                                                                          },
+                                                                                                          {
+                                                                                                              "pubstatus":  "pubmed",
+                                                                                                              "date":  "2023/01/17 06:00"
+                                                                                                          },
+                                                                                                          {
+                                                                                                              "pubstatus":  "entrez",
+                                                                                                              "date":  "2023/01/16 00:02"
+                                                                                                          }
+                                                                                                      ],
+                                                                                          "references":  [
+
+                                                                                                         ],
+                                                                                          "attributes":  [
+                                                                                                             "Has Abstract"
+                                                                                                         ],
+                                                                                          "pmcrefcount":  "",
+                                                                                          "fulljournalname":  "Neuropathology : official journal of the Japanese Society of Neuropathology",
+                                                                                          "elocationid":  "doi: 10.1111/neup.12892",
+                                                                                          "doctype":  "citation",
+                                                                                          "srccontriblist":  [
+
+                                                                                                             ],
+                                                                                          "booktitle":  "",
+                                                                                          "medium":  "",
+                                                                                          "edition":  "",
+                                                                                          "publisherlocation":  "",
+                                                                                          "publishername":  "",
+                                                                                          "srcdate":  "",
+                                                                                          "reportnumber":  "",
+                                                                                          "availablefromurl":  "",
+                                                                                          "locationlabel":  "",
+                                                                                          "doccontriblist":  [
+
+                                                                                                             ],
+                                                                                          "docdate":  "",
+                                                                                          "bookname":  "",
+                                                                                          "chapter":  "",
+                                                                                          "sortpubdate":  "2023/08/01 00:00",
+                                                                                          "sortfirstauthor":  "Kresak JL",
+                                                                                          "vernaculartitle":  ""
+                                                                                      },
+                                                                         "esearch_term":  "(\"Fibrodysplasia ossificans progressiva\"[Title/Abstract] OR \"Fibrodysplasia ossificans progressiva\"[MeSH Terms] OR \"FOP\"[Title/Abstract] OR \"FOP\"[MeSH Terms] OR \"Myositis ossificans progressiva\"[Title/Abstract] OR \"Myositis ossificans progressiva\"[MeSH Terms] OR \"Stone man syndrome\"[Title/Abstract] OR \"Stone man syndrome\"[MeSH Terms]) AND (\"ACVR1\"[Title/Abstract] OR \"SKR1\"[Title/Abstract] OR \"ALK2\"[Title/Abstract] OR \"ACVR1A\"[Title/Abstract]) AND (case report)",
+                                                                         "entity_validation":  {
+                                                                                                   "required_groups":  [
+                                                                                                                           "disease",
+                                                                                                                           "gene"
+                                                                                                                       ],
+                                                                                                   "matched_groups":  [
+                                                                                                                          "disease",
+                                                                                                                          "gene"
+                                                                                                                      ],
+                                                                                                   "missing_groups":  [
+
+                                                                                                                      ],
+                                                                                                   "matched_terms":  {
+                                                                                                                         "disease":  [
+                                                                                                                                         "Fibrodysplasia ossificans progressiva",
+                                                                                                                                         "FOP"
+                                                                                                                                     ],
+                                                                                                                         "gene":  [
+                                                                                                                                      "ACVR1"
+                                                                                                                                  ],
+                                                                                                                         "phenotype":  [
+
+                                                                                                                                       ],
+                                                                                                                         "compound":  [
+
+                                                                                                                                      ]
+                                                                                                                     },
+                                                                                                   "match_strengths":  {
+                                                                                                                           "disease":  0.5,
+                                                                                                                           "gene":  0.25,
+                                                                                                                           "phenotype":  0.0,
+                                                                                                                           "compound":  0.0
+                                                                                                                       },
+                                                                                                   "exact_disease_match":  true,
+                                                                                                   "exact_gene_match":  true,
+                                                                                                   "phenotype_overlap_strength":  null,
+                                                                                                   "compound_match_strength":  null
+                                                                                               },
+                                                                         "scoring_adjustments":  {
+                                                                                                     "entity_match_bonus":  0.16,
+                                                                                                     "entity_missing_penalty":  0.0
+                                                                                                 }
+                                                                     }
+                                                  }
+                               }
+                           ],
+    "structured_evidence":  {
+                                "diseases":  null,
+                                "genes":  null,
+                                "variants":  null,
+                                "phenotypes":  null,
+                                "compounds":  null,
+                                "trials":  null,
+                                "relationships":  null
+                            },
+    "evidence_graph":  {
+                           "nodes":  [
+                                         {
+                                             "entity_type":  "gene",
+                                             "preferred_label":  "ACVR1",
+                                             "source_ids":  {
+                                                                "hgnc":  "HGNC:171",
+                                                                "entrez":  "90",
+                                                                "ensembl":  "ENSG00000115170",
+                                                                "omim":  "102576",
+                                                                "uniprot":  "Q04771"
+                                                            },
+                                             "synonyms":  [
+                                                              "SKR1",
+                                                              "ALK2",
+                                                              "ACVR1A",
+                                                              "ACVRLK2",
+                                                              "activin A receptor, type I"
+                                                          ],
+                                             "description":  "activin A receptor type 1",
+                                             "confidence":  0.99,
+                                             "provenance":  {
+                                                                "source":  "hgnc",
+                                                                "method":  "exact_symbol",
+                                                                "query_text":  "ACVR1",
+                                                                "status":  "Approved",
+                                                                "url":  "https://rest.genenames.org/fetch/hgnc_id/171",
+                                                                "normalization_span":  {
+                                                                                           "surface_text":  "ACVR1",
+                                                                                           "character_start":  65,
+                                                                                           "character_end":  70,
+                                                                                           "candidate_entity_types":  [
+                                                                                                                          "gene"
+                                                                                                                      ],
+                                                                                           "span_strategy":  "gene_symbol_like",
+                                                                                           "routed_connector":  "hgnc"
+                                                                                       }
+                                                            }
+                                         },
+                                         {
+                                             "entity_type":  "disease",
+                                             "preferred_label":  "Fibrodysplasia ossificans progressiva",
+                                             "source_ids":  {
+                                                                "orpha":  "337",
+                                                                "medgen_uid":  "4698",
+                                                                "medgen":  "C0016037",
+                                                                "mondo":  "MONDO:0007606"
+                                                            },
+                                             "synonyms":  [
+                                                              "FOP",
+                                                              "Myositis ossificans progressiva",
+                                                              "Stone man syndrome"
+                                                          ],
+                                             "description":  "Fibrodysplasia ossificans progressiva (FOP) is a severely disabling heritable disorder of connective tissue characterized by congenital malformations of the great toes and progressive heterotopic ossification that forms qualitatively normal bone in characteristic extraskeletal sites.",
+                                             "confidence":  0.99,
+                                             "provenance":  {
+                                                                "source":  "orphadata",
+                                                                "method":  "orphacodes_api",
+                                                                "match_type":  "exact_name",
+                                                                "query_text":  "fibrodysplasia ossificans progressiva",
+                                                                "status":  "Active",
+                                                                "typology":  "Disease",
+                                                                "target_orpha":  null,
+                                                                "classification":  {
+                                                                                       "ORPHAcode":  337,
+                                                                                       "Preferred term":  "Fibrodysplasia ossificans progressiva",
+                                                                                       "Date":  "2025-06-24 08:04:43",
+                                                                                       "Classification":  [
+                                                                                                              {
+                                                                                                                  "ID of the classification":  147,
+                                                                                                                  "Name of the classification":  "Orphanet classification of rare developmental anomalies during embryogenesis"
+                                                                                                              },
+                                                                                                              {
+                                                                                                                  "ID of the classification":  156,
+                                                                                                                  "Name of the classification":  "Orphanet classification of rare genetic diseases"
+                                                                                                              },
+                                                                                                              {
+                                                                                                                  "ID of the classification":  181,
+                                                                                                                  "Name of the classification":  "Orphanet classification of rare neurological diseases"
+                                                                                                              },
+                                                                                                              {
+                                                                                                                  "ID of the classification":  187,
+                                                                                                                  "Name of the classification":  "Orphanet classification of rare skin diseases"
+                                                                                                              },
+                                                                                                              {
+                                                                                                                  "ID of the classification":  199,
+                                                                                                                  "Name of the classification":  "Orphanet classification of rare bone diseases"
+                                                                                                              }
+                                                                                                          ]
+                                                                                   },
+                                                                "url":  "https://api.orphacode.org/EN/ClinicalEntity/orphacode/337/Name",
+                                                                "crosswalks":  {
+                                                                                   "mesh":  null,
+                                                                                   "medgen":  {
+                                                                                                  "uid":  "4698",
+                                                                                                  "cui":  "C0016037",
+                                                                                                  "title":  "Progressive myositis ossificans",
+                                                                                                  "mondo_candidates":  [
+                                                                                                                           "MONDO:0007606"
+                                                                                                                       ]
+                                                                                              },
+                                                                                   "mondo":  {
+                                                                                                 "mondo":  "MONDO:0007606",
+                                                                                                 "label":  null,
+                                                                                                 "method":  "medgen_summary"
+                                                                                             }
+                                                                               },
+                                                                "normalization_span":  {
+                                                                                           "surface_text":  "fibrodysplasia ossificans progressiva",
+                                                                                           "character_start":  17,
+                                                                                           "character_end":  54,
+                                                                                           "candidate_entity_types":  [
+                                                                                                                          "disease"
+                                                                                                                      ],
+                                                                                           "span_strategy":  "biomedical_phrase",
+                                                                                           "routed_connector":  "orphadata"
+                                                                                       }
+                                                            }
+                                         },
+                                         {
+                                             "entity_type":  "article",
+                                             "preferred_label":  "Atypical Fibrodysplasia Ossificans Progressiva in a child: A case report.",
+                                             "source_ids":  {
+                                                                "pmid":  "40663969",
+                                                                "pmcid":  "PMC12281004",
+                                                                "doi":  "10.1016/j.ijscr.2025.111652"
+                                                            },
+                                             "synonyms":  [
+
+                                                          ],
+                                             "description":  "\u003ch4\u003eIntroduction and importance\u003c/h4\u003eFibrodysplasia Ossificans Progressiva (FOP) is an exceptionally rare genetic disorder characterized by progressive heterotopic ossification of soft tissues and congenital skeletal anomalies.\u003ch4\u003eCase presentation\u003c/h4\u003eThis report presents the case of a 12-year-old boy with hallmark features of FOP alongside rare congenital abnormalities, including bilateral microdactyly and thumb adhesion to the palms.\u003ch4\u003eClinical discussion\u003c/h4\u003eInitially misdiagnosed as muscular dystrophy, the patient\u0027s condition deteriorated under inappropriate management. Genetic testing confirmed a heterozygous mutation (c.617G \u003e A; p.R206H) in the ACVR1 gene.\u003ch4\u003eConclusion\u003c/h4\u003eThis case highlights the importance of early recognition of atypical congenital malformations in FOP, the risks of invasive interventions, and the necessity for genetic confirmation to prevent iatrogenic harm. A comprehensive review of the literature is also provided.",
+                                             "confidence":  0.89,
+                                             "provenance":  {
+                                                                "source":  "europepmc",
+                                                                "retrieved_at":  "2026-05-12T06:38:28.001717Z",
+                                                                "raw_record":  {
+                                                                                   "id":  "40663969",
+                                                                                   "source":  "MED",
+                                                                                   "pmid":  "40663969",
+                                                                                   "pmcid":  "PMC12281004",
+                                                                                   "fullTextIdList":  {
+                                                                                                          "fullTextId":  [
+                                                                                                                             "PMC12281004"
+                                                                                                                         ]
+                                                                                                      },
+                                                                                   "doi":  "10.1016/j.ijscr.2025.111652",
+                                                                                   "title":  "Atypical Fibrodysplasia Ossificans Progressiva in a child: A case report.",
+                                                                                   "authorString":  "Noufal A, Alsharef Y, Alainein AA, Adi M, Jumaa A, Alfandi A.",
+                                                                                   "authorList":  {
+                                                                                                      "author":  [
+                                                                                                                     {
+                                                                                                                         "fullName":  "Noufal A",
+                                                                                                                         "firstName":  "Abdullah",
+                                                                                                                         "lastName":  "Noufal",
+                                                                                                                         "initials":  "A",
+                                                                                                                         "authorAffiliationDetailsList":  "@{authorAffiliation=System.Object[]}"
+                                                                                                                     },
+                                                                                                                     {
+                                                                                                                         "fullName":  "Alsharef Y",
+                                                                                                                         "firstName":  "Yaman",
+                                                                                                                         "lastName":  "Alsharef",
+                                                                                                                         "initials":  "Y",
+                                                                                                                         "authorAffiliationDetailsList":  "@{authorAffiliation=System.Object[]}"
+                                                                                                                     },
+                                                                                                                     {
+                                                                                                                         "fullName":  "Alainein AA",
+                                                                                                                         "firstName":  "Aya Abou",
+                                                                                                                         "lastName":  "Alainein",
+                                                                                                                         "initials":  "AA",
+                                                                                                                         "authorAffiliationDetailsList":  "@{authorAffiliation=System.Object[]}"
+                                                                                                                     },
+                                                                                                                     {
+                                                                                                                         "fullName":  "Adi M",
+                                                                                                                         "firstName":  "Mohammad",
+                                                                                                                         "lastName":  "Adi",
+                                                                                                                         "initials":  "M",
+                                                                                                                         "authorAffiliationDetailsList":  "@{authorAffiliation=System.Object[]}"
+                                                                                                                     },
+                                                                                                                     {
+                                                                                                                         "fullName":  "Jumaa A",
+                                                                                                                         "firstName":  "Ali",
+                                                                                                                         "lastName":  "Jumaa",
+                                                                                                                         "initials":  "A",
+                                                                                                                         "authorAffiliationDetailsList":  "@{authorAffiliation=System.Object[]}"
+                                                                                                                     },
+                                                                                                                     {
+                                                                                                                         "fullName":  "Alfandi A",
+                                                                                                                         "firstName":  "Abdullah",
+                                                                                                                         "lastName":  "Alfandi",
+                                                                                                                         "initials":  "A",
+                                                                                                                         "authorAffiliationDetailsList":  "@{authorAffiliation=System.Object[]}"
+                                                                                                                     }
+                                                                                                                 ]
+                                                                                                  },
+                                                                                   "journalInfo":  {
+                                                                                                       "volume":  "133",
+                                                                                                       "journalIssueId":  3984110,
+                                                                                                       "dateOfPublication":  "2025 Aug",
+                                                                                                       "monthOfPublication":  8,
+                                                                                                       "yearOfPublication":  2025,
+                                                                                                       "printPublicationDate":  "2025-08-01",
+                                                                                                       "journal":  {
+                                                                                                                       "title":  "International journal of surgery case reports",
+                                                                                                                       "medlineAbbreviation":  "Int J Surg Case Rep",
+                                                                                                                       "essn":  "2210-2612",
+                                                                                                                       "issn":  "2210-2612",
+                                                                                                                       "nlmid":  "101529872",
+                                                                                                                       "isoabbreviation":  "Int J Surg Case Rep"
+                                                                                                                   }
+                                                                                                   },
+                                                                                   "pubYear":  "2025",
+                                                                                   "pageInfo":  "111652",
+                                                                                   "abstractText":  "\u003ch4\u003eIntroduction and importance\u003c/h4\u003eFibrodysplasia Ossificans Progressiva (FOP) is an exceptionally rare genetic disorder characterized by progressive heterotopic ossification of soft tissues and congenital skeletal anomalies.\u003ch4\u003eCase presentation\u003c/h4\u003eThis report presents the case of a 12-year-old boy with hallmark features of FOP alongside rare congenital abnormalities, including bilateral microdactyly and thumb adhesion to the palms.\u003ch4\u003eClinical discussion\u003c/h4\u003eInitially misdiagnosed as muscular dystrophy, the patient\u0027s condition deteriorated under inappropriate management. Genetic testing confirmed a heterozygous mutation (c.617G \u003e A; p.R206H) in the ACVR1 gene.\u003ch4\u003eConclusion\u003c/h4\u003eThis case highlights the importance of early recognition of atypical congenital malformations in FOP, the risks of invasive interventions, and the necessity for genetic confirmation to prevent iatrogenic harm. A comprehensive review of the literature is also provided.",
+                                                                                   "affiliation":  "ASPU (AlSham Private University), Damascus, Syria. Electronic address: abdullahanoufal@gmail.com.",
+                                                                                   "publicationStatus":  "ppublish",
+                                                                                   "language":  "eng",
+                                                                                   "pubModel":  "Print-Electronic",
+                                                                                   "pubTypeList":  {
+                                                                                                       "pubType":  [
+                                                                                                                       "Journal Article",
+                                                                                                                       "Case Reports",
+                                                                                                                       "case-report"
+                                                                                                                   ]
+                                                                                                   },
+                                                                                   "keywordList":  {
+                                                                                                       "keyword":  [
+                                                                                                                       "Genetic mutation",
+                                                                                                                       "Case Report",
+                                                                                                                       "Heterotopic Ossification",
+                                                                                                                       "Acvr1 Gene",
+                                                                                                                       "Fibrodysplasia Ossificans Progressiva (Fop)"
+                                                                                                                   ]
+                                                                                                   },
+                                                                                   "fullTextUrlList":  {
+                                                                                                           "fullTextUrl":  [
+                                                                                                                               {
+                                                                                                                                   "availability":  "Subscription required",
+                                                                                                                                   "availabilityCode":  "S",
+                                                                                                                                   "documentStyle":  "doi",
+                                                                                                                                   "site":  "DOI",
+                                                                                                                                   "url":  "https://doi.org/10.1016/j.ijscr.2025.111652"
+                                                                                                                               },
+                                                                                                                               {
+                                                                                                                                   "availability":  "Open access",
+                                                                                                                                   "availabilityCode":  "OA",
+                                                                                                                                   "documentStyle":  "html",
+                                                                                                                                   "site":  "Europe_PMC",
+                                                                                                                                   "url":  "https://europepmc.org/articles/PMC12281004"
+                                                                                                                               },
+                                                                                                                               {
+                                                                                                                                   "availability":  "Open access",
+                                                                                                                                   "availabilityCode":  "OA",
+                                                                                                                                   "documentStyle":  "pdf",
+                                                                                                                                   "site":  "Europe_PMC",
+                                                                                                                                   "url":  "https://europepmc.org/articles/PMC12281004?pdf=render"
+                                                                                                                               }
+                                                                                                                           ]
+                                                                                                       },
+                                                                                   "isOpenAccess":  "Y",
+                                                                                   "inEPMC":  "Y",
+                                                                                   "inPMC":  "Y",
+                                                                                   "hasPDF":  "Y",
+                                                                                   "hasBook":  "N",
+                                                                                   "hasSuppl":  "N",
+                                                                                   "citedByCount":  0,
+                                                                                   "hasData":  "N",
+                                                                                   "hasReferences":  "Y",
+                                                                                   "hasTextMinedTerms":  "Y",
+                                                                                   "hasDbCrossReferences":  "N",
+                                                                                   "hasLabsLinks":  "N",
+                                                                                   "license":  "cc by-nc-nd",
+                                                                                   "hasEvaluations":  "N",
+                                                                                   "authMan":  "N",
+                                                                                   "epmcAuthMan":  "N",
+                                                                                   "nihAuthMan":  "N",
+                                                                                   "hasTMAccessionNumbers":  "N",
+                                                                                   "dateOfCreation":  "2025-07-15",
+                                                                                   "firstIndexDate":  "2025-07-16",
+                                                                                   "fullTextReceivedDate":  "2025-12-03",
+                                                                                   "dateOfRevision":  "2025-07-29",
+                                                                                   "electronicPublicationDate":  "2025-07-10",
+                                                                                   "firstPublicationDate":  "2025-07-10"
+                                                                               }
+                                                            }
+                                         },
+                                         {
+                                             "entity_type":  "article",
+                                             "preferred_label":  "Midline brain hamartomatous lesions in fibrodysplasia ossificans progressiva with ACVR1 mutations.",
+                                             "source_ids":  {
+                                                                "pmid":  "36642816",
+                                                                "doi":  "10.1111/neup.12892"
+                                                            },
+                                             "synonyms":  [
+
+                                                          ],
+                                             "description":  "Fibrodysplasia ossificans progressiva (FOP) is a rare genetic disorder characterized by extensive heterotopic ossification of soft tissue structures leading to severe limitations in movement. FOP is caused by a germline mutation in the activating receptor type IA (ACVR1) gene. Worrisome is the fact that up to a third of diffuse intrinsic pontine gliomas (DIPG) also harbor the same point mutation in ACVR1. Radiological reports of central nervous system (CNS) involvement by FOP have described brainstem masses; however, the literature on the histopathology or pathogenesis of these lesions is scant. Here we present detailed neuropathologic findings of a brainstem mass in a patient with FOP and suggest that the tumor is hamartomatous in nature. This report, along with a literature review of radiographic and laboratory data, offers support for the idea that the ACVR1 mutation may incite CNS proliferation, predominantly in the brainstem, but is probably not an oncologic driver. These lesions may be seen at autopsy and are likely noncontributory to death.",
+                                             "confidence":  0.5,
+                                             "provenance":  {
+                                                                "source":  "pubmed",
+                                                                "retrieved_at":  "2026-05-12T06:38:28.617486Z",
+                                                                "raw_record":  {
+                                                                                   "esummary":  {
+                                                                                                    "uid":  "36642816",
+                                                                                                    "pubdate":  "2023 Aug",
+                                                                                                    "epubdate":  "2023 Jan 15",
+                                                                                                    "source":  "Neuropathology",
+                                                                                                    "authors":  [
+                                                                                                                    {
+                                                                                                                        "name":  "Kresak JL",
+                                                                                                                        "authtype":  "Author",
+                                                                                                                        "clusterid":  ""
+                                                                                                                    },
+                                                                                                                    {
+                                                                                                                        "name":  "Walsh M",
+                                                                                                                        "authtype":  "Author",
+                                                                                                                        "clusterid":  ""
+                                                                                                                    },
+                                                                                                                    {
+                                                                                                                        "name":  "Tuzzolo A",
+                                                                                                                        "authtype":  "Author",
+                                                                                                                        "clusterid":  ""
+                                                                                                                    },
+                                                                                                                    {
+                                                                                                                        "name":  "Ordulu Z",
+                                                                                                                        "authtype":  "Author",
+                                                                                                                        "clusterid":  ""
+                                                                                                                    },
+                                                                                                                    {
+                                                                                                                        "name":  "Gregory J",
+                                                                                                                        "authtype":  "Author",
+                                                                                                                        "clusterid":  ""
+                                                                                                                    }
+                                                                                                                ],
+                                                                                                    "lastauthor":  "Gregory J",
+                                                                                                    "title":  "Midline brain hamartomatous lesions in fibrodysplasia ossificans progressiva with ACVR1 mutations.",
+                                                                                                    "sorttitle":  "midline brain hamartomatous lesions in fibrodysplasia ossificans progressiva with acvr1 mutations",
+                                                                                                    "volume":  "43",
+                                                                                                    "issue":  "4",
+                                                                                                    "pages":  "333-339",
+                                                                                                    "lang":  [
+                                                                                                                 "eng"
+                                                                                                             ],
+                                                                                                    "nlmuniqueid":  "9606526",
+                                                                                                    "issn":  "0919-6544",
+                                                                                                    "essn":  "1440-1789",
+                                                                                                    "pubtype":  [
+                                                                                                                    "Review",
+                                                                                                                    "Case Reports",
+                                                                                                                    "Journal Article"
+                                                                                                                ],
+                                                                                                    "recordstatus":  "PubMed - indexed for MEDLINE",
+                                                                                                    "pubstatus":  "256",
+                                                                                                    "articleids":  [
+                                                                                                                       {
+                                                                                                                           "idtype":  "pubmed",
+                                                                                                                           "idtypen":  1,
+                                                                                                                           "value":  "36642816"
+                                                                                                                       },
+                                                                                                                       {
+                                                                                                                           "idtype":  "doi",
+                                                                                                                           "idtypen":  3,
+                                                                                                                           "value":  "10.1111/neup.12892"
+                                                                                                                       }
+                                                                                                                   ],
+                                                                                                    "history":  [
+                                                                                                                    {
+                                                                                                                        "pubstatus":  "revised",
+                                                                                                                        "date":  "2022/12/16 00:00"
+                                                                                                                    },
+                                                                                                                    {
+                                                                                                                        "pubstatus":  "received",
+                                                                                                                        "date":  "2022/08/29 00:00"
+                                                                                                                    },
+                                                                                                                    {
+                                                                                                                        "pubstatus":  "accepted",
+                                                                                                                        "date":  "2022/12/19 00:00"
+                                                                                                                    },
+                                                                                                                    {
+                                                                                                                        "pubstatus":  "medline",
+                                                                                                                        "date":  "2023/08/03 06:43"
+                                                                                                                    },
+                                                                                                                    {
+                                                                                                                        "pubstatus":  "pubmed",
+                                                                                                                        "date":  "2023/01/17 06:00"
+                                                                                                                    },
+                                                                                                                    {
+                                                                                                                        "pubstatus":  "entrez",
+                                                                                                                        "date":  "2023/01/16 00:02"
+                                                                                                                    }
+                                                                                                                ],
+                                                                                                    "references":  [
+
+                                                                                                                   ],
+                                                                                                    "attributes":  [
+                                                                                                                       "Has Abstract"
+                                                                                                                   ],
+                                                                                                    "pmcrefcount":  "",
+                                                                                                    "fulljournalname":  "Neuropathology : official journal of the Japanese Society of Neuropathology",
+                                                                                                    "elocationid":  "doi: 10.1111/neup.12892",
+                                                                                                    "doctype":  "citation",
+                                                                                                    "srccontriblist":  [
+
+                                                                                                                       ],
+                                                                                                    "booktitle":  "",
+                                                                                                    "medium":  "",
+                                                                                                    "edition":  "",
+                                                                                                    "publisherlocation":  "",
+                                                                                                    "publishername":  "",
+                                                                                                    "srcdate":  "",
+                                                                                                    "reportnumber":  "",
+                                                                                                    "availablefromurl":  "",
+                                                                                                    "locationlabel":  "",
+                                                                                                    "doccontriblist":  [
+
+                                                                                                                       ],
+                                                                                                    "docdate":  "",
+                                                                                                    "bookname":  "",
+                                                                                                    "chapter":  "",
+                                                                                                    "sortpubdate":  "2023/08/01 00:00",
+                                                                                                    "sortfirstauthor":  "Kresak JL",
+                                                                                                    "vernaculartitle":  ""
+                                                                                                },
+                                                                                   "esearch_term":  "(\"Fibrodysplasia ossificans progressiva\"[Title/Abstract] OR \"Fibrodysplasia ossificans progressiva\"[MeSH Terms] OR \"FOP\"[Title/Abstract] OR \"FOP\"[MeSH Terms] OR \"Myositis ossificans progressiva\"[Title/Abstract] OR \"Myositis ossificans progressiva\"[MeSH Terms] OR \"Stone man syndrome\"[Title/Abstract] OR \"Stone man syndrome\"[MeSH Terms]) AND (\"ACVR1\"[Title/Abstract] OR \"SKR1\"[Title/Abstract] OR \"ALK2\"[Title/Abstract] OR \"ACVR1A\"[Title/Abstract]) AND (case report)",
+                                                                                   "entity_validation":  {
+                                                                                                             "required_groups":  [
+                                                                                                                                     "disease",
+                                                                                                                                     "gene"
+                                                                                                                                 ],
+                                                                                                             "matched_groups":  [
+                                                                                                                                    "disease",
+                                                                                                                                    "gene"
+                                                                                                                                ],
+                                                                                                             "missing_groups":  [
+
+                                                                                                                                ],
+                                                                                                             "matched_terms":  {
+                                                                                                                                   "disease":  [
+                                                                                                                                                   "Fibrodysplasia ossificans progressiva",
+                                                                                                                                                   "FOP"
+                                                                                                                                               ],
+                                                                                                                                   "gene":  [
+                                                                                                                                                "ACVR1"
+                                                                                                                                            ],
+                                                                                                                                   "phenotype":  [
+
+                                                                                                                                                 ],
+                                                                                                                                   "compound":  [
+
+                                                                                                                                                ]
+                                                                                                                               },
+                                                                                                             "match_strengths":  {
+                                                                                                                                     "disease":  0.5,
+                                                                                                                                     "gene":  0.25,
+                                                                                                                                     "phenotype":  0.0,
+                                                                                                                                     "compound":  0.0
+                                                                                                                                 },
+                                                                                                             "exact_disease_match":  true,
+                                                                                                             "exact_gene_match":  true,
+                                                                                                             "phenotype_overlap_strength":  null,
+                                                                                                             "compound_match_strength":  null
+                                                                                                         },
+                                                                                   "scoring_adjustments":  {
+                                                                                                               "entity_match_bonus":  0.16,
+                                                                                                               "entity_missing_penalty":  0.0
+                                                                                                           }
+                                                                               }
+                                                            }
+                                         }
+                                     ],
+                           "edges":  [
+                                         {
+                                             "edge_type":  "article_mentions_entity",
+                                             "source":  "europepmc",
+                                             "confidence":  0.76,
+                                             "subject_key":  "EntityType.article:pmid:40663969",
+                                             "object_key":  "EntityType.gene:hgnc:HGNC:171",
+                                             "directionality":  "article_to_entity",
+                                             "provenance":  {
+                                                                "matched_term":  "ACVR1",
+                                                                "matched_location":  "abstract",
+                                                                "pmid":  "40663969",
+                                                                "doi":  "10.1016/j.ijscr.2025.111652"
+                                                            }
+                                         },
+                                         {
+                                             "edge_type":  "article_mentions_entity",
+                                             "source":  "europepmc",
+                                             "confidence":  0.88,
+                                             "subject_key":  "EntityType.article:pmid:40663969",
+                                             "object_key":  "EntityType.disease:orpha:337",
+                                             "directionality":  "article_to_entity",
+                                             "provenance":  {
+                                                                "matched_term":  "Fibrodysplasia ossificans progressiva",
+                                                                "matched_location":  "title",
+                                                                "pmid":  "40663969",
+                                                                "doi":  "10.1016/j.ijscr.2025.111652"
+                                                            }
+                                         },
+                                         {
+                                             "edge_type":  "article_mentions_entity",
+                                             "source":  "pubmed",
+                                             "confidence":  0.94,
+                                             "subject_key":  "EntityType.article:pmid:36642816",
+                                             "object_key":  "EntityType.gene:hgnc:HGNC:171",
+                                             "directionality":  "article_to_entity",
+                                             "provenance":  {
+                                                                "matched_term":  "ACVR1",
+                                                                "matched_location":  "title",
+                                                                "pmid":  "36642816",
+                                                                "doi":  "10.1111/neup.12892"
+                                                            }
+                                         },
+                                         {
+                                             "edge_type":  "article_mentions_entity",
+                                             "source":  "pubmed",
+                                             "confidence":  0.88,
+                                             "subject_key":  "EntityType.article:pmid:36642816",
+                                             "object_key":  "EntityType.disease:orpha:337",
+                                             "directionality":  "article_to_entity",
+                                             "provenance":  {
+                                                                "matched_term":  "Fibrodysplasia ossificans progressiva",
+                                                                "matched_location":  "title",
+                                                                "pmid":  "36642816",
+                                                                "doi":  "10.1111/neup.12892"
+                                                            }
+                                         }
+                                     ],
+                           "ranked_summaries":  [
+                                                    "Graph contains 4 unique nodes and 4 edges.",
+                                                    "Node counts �?? diseases: 1, genes: 1, variants: 0, phenotypes: 0, compounds: 0, trials: 0, articles: 2.",
+                                                    "Edge counts �?? structured: 0, literature-derived: 4.",
+                                                    "Top high-confidence entities: ACVR1 (EntityType.gene), Fibrodysplasia ossificans progressiva (EntityType.disease)"
+                                                ],
+                           "explanation":  {
+                                               "scoring_profile":  "default",
+                                               "mention_threshold":  0.65,
+                                               "node_counts_by_type":  {
+                                                                           "gene":  1,
+                                                                           "disease":  1,
+                                                                           "article":  2
+                                                                       },
+                                               "edge_counts_by_type":  {
+                                                                           "article_mentions_entity":  4
+                                                                       },
+                                               "structured_edge_count":  0,
+                                               "literature_edge_count":  4,
+                                               "notes":  [
+                                                             "Structured edges come directly from search_structured_evidence().",
+                                                             "Literature edges are heuristic mention links from title/abstract matching.",
+                                                             "article_supports_relationship_candidate edges are inferred when an article mentions both endpoints of a structured relationship."
+                                                         ]
+                                           }
+                       },
+    "trace":  {
+                  "source":  "broker.query_evidence",
+                  "raw_query":  "case reports for fibrodysplasia ossificans progressiva involving ACVR1",
+                  "started_at":  "2026-05-12T06:37:23.833810Z",
+                  "steps":  [
+                                {
+                                    "step":  "normalize_entities",
+                                    "status":  "ok",
+                                    "entity_count":  2,
+                                    "alternative_count":  4
+                                },
+                                {
+                                    "step":  "search_literature",
+                                    "status":  "ok",
+                                    "result_count":  2,
+                                    "literature_keywords":  "case report"
+                                },
+                                {
+                                    "step":  "search_structured_evidence",
+                                    "status":  "skipped",
+                                    "reason":  "include_structured_evidence=false"
+                                },
+                                {
+                                    "step":  "assemble_evidence_graph",
+                                    "status":  "ok",
+                                    "node_count":  4,
+                                    "edge_count":  4,
+                                    "scoring_profile":  null
+                                }
+                            ],
+                  "warnings":  [
+
+                               ],
+                  "completed_at":  "2026-05-12T06:38:28.619482Z"
+              }
+}

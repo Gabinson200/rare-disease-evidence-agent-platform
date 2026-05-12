@@ -1,0 +1,17 @@
+﻿{
+  mcp: {
+    servers: {
+      "rare-disease-evidence": {
+        command: "C:\\Users\\adamk\\Downloads\\rare-disease-evidence-agent-platform\\venv\\Scripts\\python.exe",
+        args: [
+          "-m",
+          "raredisease_platform.agent.mcp_server"
+        ],
+        cwd: "C:\\Users\\adamk\\Downloads\\rare-disease-evidence-agent-platform",
+        env: {
+          PYTHONUTF8: "1"
+        }
+      }
+    }
+  }
+}
