@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import sys
+# Path injection must happen AFTER the future import, but BEFORE importing local modules
 sys.path.insert(0, "C:/Users/adamk/Downloads/rare-disease-evidence-agent-platform")
 
-from __future__ import annotations
 from typing import Any, Dict, Optional, List
 from mcp.server.fastmcp import FastMCP
 from raredisease_platform.agent.openclaw_tools import evidence_query
