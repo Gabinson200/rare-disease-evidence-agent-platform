@@ -1,4 +1,5 @@
 to start webserver backend:
+cd downloads\rare-disease-evidence-agent-platform
 
 PS C:\Users\adamk\downloads\rare-disease-evidence-agent-platform> .\venv\Scripts\Activate.ps1
 
