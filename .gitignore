@@ -6,6 +6,7 @@ __pycache__/
 venv/
 env/
 mcp_jobs/
+ui_runs/
 ENV/
 .idea/
 .vscode/

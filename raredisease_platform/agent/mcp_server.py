@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import json
 import logging
+import re
 import sys
 import time
 import traceback
@@ -14,8 +16,7 @@ import httpx
 from mcp.server.fastmcp import Context, FastMCP
 
 # Path injection must happen AFTER the future import, but BEFORE importing local modules.
-# This assumes this file is located at:
-# raredisease_platform/agent/mcp_server.py
+# This assumes this file is located at: raredisease_platform/agent/mcp_server.py
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -25,7 +26,12 @@ from raredisease_platform.agent.openclaw_tools import evidence_query  # noqa: E4
 BROKER_BASE_URL = "http://127.0.0.1:8000"
 LOG_PATH = REPO_ROOT / "mcp_runtime.log"
 JOBS_DIR = REPO_ROOT / "mcp_jobs"
+UI_RUNS_DIR = REPO_ROOT / "ui_runs"
 
+
+# ---------------------------------------------------------------------------
+# Logging / server setup
+# ---------------------------------------------------------------------------
 
 def configure_logging() -> logging.Logger:
     logger = logging.getLogger("rare_disease_mcp")
@@ -55,23 +61,25 @@ def configure_logging() -> logging.Logger:
     logger.info("REPO_ROOT=%s", REPO_ROOT)
     logger.info("LOG_PATH=%s", LOG_PATH)
     logger.info("JOBS_DIR=%s", JOBS_DIR)
+    logger.info("UI_RUNS_DIR=%s", UI_RUNS_DIR)
     logger.info("BROKER_BASE_URL=%s", BROKER_BASE_URL)
     logger.info("python=%s", sys.executable)
     logger.info("argv=%s", sys.argv)
     logger.info("============================================================")
-
     return logger
 
 
 logger = configure_logging()
 JOBS_DIR.mkdir(exist_ok=True)
+UI_RUNS_DIR.mkdir(exist_ok=True)
 
 mcp = FastMCP("rare-disease-evidence")
-
-# In-memory cache for job metadata. Full results are saved as separate files so
-# OpenClaw does not receive thousands of lines unless explicitly requested.
 JOBS: Dict[str, Dict[str, Any]] = {}
 
+
+# ---------------------------------------------------------------------------
+# Generic helpers
+# ---------------------------------------------------------------------------
 
 def _now() -> float:
     return time.time()
@@ -84,6 +92,56 @@ def _json_size_bytes(obj: Any) -> int:
         return -1
 
 
+def _clean_text(value: Any, *, max_chars: Optional[int] = None) -> str:
+    if value is None:
+        return ""
+
+    text = html.unescape(str(value))
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = " ".join(text.split())
+
+    if max_chars is not None and max_chars > 0 and len(text) > max_chars:
+        return text[: max_chars - 3].rstrip() + "..."
+
+    return text
+
+
+def _remove_empty(value: Any) -> Any:
+    if isinstance(value, dict):
+        cleaned = {k: _remove_empty(v) for k, v in value.items()}
+        return {
+            k: v
+            for k, v in cleaned.items()
+            if v not in (None, "", [], {})
+        }
+
+    if isinstance(value, list):
+        cleaned_list = [_remove_empty(v) for v in value]
+        return [v for v in cleaned_list if v not in (None, "", [], {})]
+
+    return value
+
+
+def _write_json_atomic(path: Path, payload: Dict[str, Any]) -> None:
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False, default=str),
+        encoding="utf-8",
+    )
+    tmp_path.replace(path)
+
+
+def _read_json_file(path: Path) -> Optional[Dict[str, Any]]:
+    if not path.exists():
+        return None
+
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        logger.exception("Failed to read JSON file: %s", path)
+        return None
+
+
 def _safe_job_id(job_id: str) -> str:
     return "".join(ch for ch in str(job_id) if ch.isalnum() or ch in "-_")
 
@@ -94,19 +152,6 @@ def _job_path(job_id: str) -> Path:
 
 def _full_result_path(job_id: str) -> Path:
     return JOBS_DIR / f"{_safe_job_id(job_id)}.full.json"
-
-
-def _compact_result_path(job_id: str) -> Path:
-    return JOBS_DIR / f"{_safe_job_id(job_id)}.compact.json"
-
-
-def _write_json_atomic(path: Path, payload: Dict[str, Any]) -> None:
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False, default=str),
-        encoding="utf-8",
-    )
-    tmp_path.replace(path)
 
 
 def _write_job(job_id: str, job: Dict[str, Any]) -> None:
@@ -132,756 +177,219 @@ def _read_job(job_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def _read_json_file(path: Path) -> Optional[Dict[str, Any]]:
-    if not path.exists():
-        return None
+def _safe_ui_run_path(path_or_name: str) -> Path:
+    """
+    Resolve a UI run file safely.
 
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        logger.exception("Failed to read JSON file: %s", path)
-        return None
+    Accepts:
+    - "20260518_213248.agent.json"
+    - "ui_runs/20260518_213248.agent.json"
+    - "ui_runs\\20260518_213248.agent.json"
 
+    Rejects paths outside REPO_ROOT/ui_runs.
+    """
+    raw = str(path_or_name).strip().replace("\\", "/")
+    name = Path(raw).name
 
-def _truncate_text(value: Optional[str], max_chars: int) -> Optional[str]:
-    if not value:
-        return None
+    if not name.endswith(".json"):
+        raise ValueError("Only .json files are allowed.")
 
-    text = " ".join(str(value).split())
+    path = (UI_RUNS_DIR / name).resolve()
+    allowed_root = UI_RUNS_DIR.resolve()
 
-    if len(text) <= max_chars:
-        return text
+    if allowed_root not in path.parents:
+        raise ValueError("Resolved path is outside ui_runs.")
 
-    return text[: max_chars - 3].rstrip() + "..."
-
-
-def _first_present(mapping: Dict[str, Any], keys: List[str]) -> Optional[Any]:
-    for key in keys:
-        value = mapping.get(key)
-        if value not in (None, "", [], {}):
-            return value
-    return None
+    return path
 
 
-def _brief_source_ids(source_ids: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    source_ids = source_ids or {}
+# ---------------------------------------------------------------------------
+# Abstract-pack extraction
+# ---------------------------------------------------------------------------
 
-    preferred_keys = [
-        "orpha",
-        "orphanet",
-        "mondo",
-        "hgnc",
-        "entrez",
-        "ensembl",
-        "ensembl_gene_id",
-        "hpo",
-        "mesh",
-        "medgen",
-        "clinvar",
-        "vcv",
-        "rcv",
-        "dbsnp",
-        "pubchem",
-        "nct",
-    ]
-
-    out: Dict[str, Any] = {}
-
-    for key in preferred_keys:
-        if key in source_ids and source_ids[key] not in (None, "", [], {}):
-            out[key] = source_ids[key]
-
-    # Cap the number of IDs so a weird connector cannot flood the LLM context.
-    return dict(list(out.items())[:8])
-
-
-def _brief_entity(entity: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "type": entity.get("entity_type"),
-        "label": entity.get("preferred_label"),
-        "ids": _brief_source_ids(entity.get("source_ids")),
-        "confidence": entity.get("confidence"),
-        "synonyms": (entity.get("synonyms") or [])[:3],
-    }
-
-
-def _brief_match_features(match_features: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    match_features = match_features or {}
-
-    keep_keys = [
-        "exact_disease_id",
-        "exact_gene_id",
-        "exact_phenotype_id",
-        "exact_compound_id",
-        "publication_type",
-        "title_match_strength",
-        "abstract_match_strength",
-        "phenotype_overlap_strength",
-        "mesh_topic_importance",
-        "recency",
-        "full_text_available",
-        "source_trust_level",
-    ]
-
-    return {
-        key: match_features.get(key)
-        for key in keep_keys
-        if match_features.get(key) not in (None, "", [], {})
-    }
-
-
-def _brief_entity_validation(raw_record: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    raw_record = raw_record or {}
-    validation = raw_record.get("entity_validation") or {}
-
-    out = {
-        "required_groups": validation.get("required_groups"),
-        "matched_groups": validation.get("matched_groups"),
-        "missing_groups": validation.get("missing_groups"),
-        "matched_terms": validation.get("matched_terms"),
-    }
-
-    return {
-        key: value
-        for key, value in out.items()
-        if value not in (None, "", [], {})
-    }
-
-
-def _brief_scoring_adjustments(raw_record: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    raw_record = raw_record or {}
-    adjustments = raw_record.get("scoring_adjustments") or []
-
-    if not isinstance(adjustments, list):
-        return []
-
-    brief: List[Dict[str, Any]] = []
-
-    for item in adjustments[:6]:
-        if not isinstance(item, dict):
-            continue
-
-        brief.append(
-            {
-                "reason": item.get("reason"),
-                "delta": item.get("delta"),
-            }
-        )
-
-    return brief
-
-
-def _brief_literature_result(
+def _article_from_agent_record(
     article: Dict[str, Any],
     *,
-    include_abstracts: bool,
+    paper_index: int,
     max_abstract_chars: int,
 ) -> Dict[str, Any]:
-    provenance = article.get("provenance") or {}
-    raw_record = provenance.get("raw_record") or {}
-
-    brief = {
-        "pmid": article.get("pmid"),
-        "pmcid": article.get("pmcid"),
-        "doi": article.get("doi"),
-        "title": article.get("title"),
-        "year": article.get("year"),
-        "journal": article.get("journal"),
-        "authors": (article.get("authors") or [])[:4],
-        "score": article.get("score"),
-        "match_features": _brief_match_features(article.get("match_features")),
-        "entity_validation": _brief_entity_validation(raw_record),
-        "scoring_adjustments": _brief_scoring_adjustments(raw_record),
-        "pubmed_query": raw_record.get("esearch_term"),
-    }
-
-    if include_abstracts:
-        brief["abstract_excerpt"] = _truncate_text(
-            article.get("abstract"),
-            max_abstract_chars,
-        )
-
-    return {
-        key: value
-        for key, value in brief.items()
-        if value not in (None, "", [], {})
-    }
-
-
-def _trace_summary(result: Dict[str, Any]) -> Dict[str, Any]:
-    trace = result.get("trace") or {}
-    normalized_bundle = result.get("normalized_bundle") or {}
-    normalization_trace = normalized_bundle.get("normalization_trace") or {}
-
-    warnings: List[str] = []
-
-    for item in normalization_trace.get("warnings") or []:
-        warnings.append(str(item))
-
-    for item in trace.get("warnings") or []:
-        warnings.append(str(item))
-
-    detected_candidates = normalization_trace.get("detected_candidates") or []
-    dropped_candidates = normalization_trace.get("dropped_candidates") or []
-    connector_calls = normalization_trace.get("connector_calls") or []
-    threshold_decisions = normalization_trace.get("threshold_decisions") or []
-
-    connector_summary: List[Dict[str, Any]] = []
-    for call in connector_calls[:8]:
-        if not isinstance(call, dict):
-            continue
-
-        connector_summary.append(
-            {
-                "connector": call.get("connector"),
-                "surface_text": call.get("surface_text"),
-                "status": call.get("status"),
-                "records_returned": call.get("records_returned"),
-                "error": call.get("error"),
-            }
-        )
-
-    detected_summary: List[Dict[str, Any]] = []
-    for candidate in detected_candidates[:8]:
-        if not isinstance(candidate, dict):
-            continue
-
-        detected_summary.append(
-            {
-                "surface_text": candidate.get("surface_text"),
-                "types": candidate.get("candidate_entity_types"),
-                "strategy": candidate.get("strategy"),
-            }
-        )
-
-    return {
-        "warnings": warnings[:8],
-        "detected_candidates": detected_summary,
-        "connector_calls": connector_summary,
-        "counts": {
-            "detected_candidates": len(detected_candidates),
-            "connector_calls": len(connector_calls),
-            "threshold_decisions": len(threshold_decisions),
-            "dropped_candidates": len(dropped_candidates),
-        },
-    }
-
-
-def _graph_summary(result: Dict[str, Any]) -> Dict[str, Any]:
-    graph = result.get("evidence_graph") or {}
-
-    if not isinstance(graph, dict):
-        return {}
-
-    nodes = graph.get("nodes") or []
-    edges = graph.get("edges") or []
-    ranked_summaries = graph.get("ranked_summaries") or []
-
-    return {
-        "node_count": len(nodes),
-        "edge_count": len(edges),
-        "ranked_summaries": ranked_summaries[:3] if isinstance(ranked_summaries, list) else [],
-    }
-
-
-def _structured_evidence_summary(result: Dict[str, Any]) -> Dict[str, Any]:
-    structured = result.get("structured_evidence") or {}
-
-    if not isinstance(structured, dict):
-        return {}
-
-    counts: Dict[str, int] = {}
-
-    for key, value in structured.items():
-        if isinstance(value, list):
-            counts[key] = len(value)
-        elif value is not None:
-            counts[key] = 1
-
-    return counts
-
-
-def _make_summary_text(
-    *,
-    entities: List[Dict[str, Any]],
-    literature_results: List[Dict[str, Any]],
-    trace_summary: Dict[str, Any],
-) -> str:
-    pieces: List[str] = []
-
-    if entities:
-        labels = []
-        for entity in entities[:5]:
-            label = entity.get("label")
-            entity_type = entity.get("type")
-            if label and entity_type:
-                labels.append(f"{label} ({entity_type})")
-            elif label:
-                labels.append(str(label))
-
-        if labels:
-            pieces.append("Interpreted entities: " + ", ".join(labels) + ".")
-
-    if literature_results:
-        top = literature_results[0]
-        title = top.get("title") or "Untitled result"
-        pmid = top.get("pmid") or "unknown PMID"
-        year = top.get("year") or "unknown year"
-        journal = top.get("journal") or "unknown journal"
-        score = top.get("score")
-
-        if score is not None:
-            pieces.append(
-                f"Top result: {title} (PMID: {pmid}, {year}, {journal}, score: {score})."
-            )
-        else:
-            pieces.append(
-                f"Top result: {title} (PMID: {pmid}, {year}, {journal})."
-            )
-    else:
-        pieces.append("No literature results were returned.")
-
-    warnings = trace_summary.get("warnings") or []
-    counts = trace_summary.get("counts") or {}
-
-    if warnings:
-        pieces.append("Trace warnings: " + "; ".join(warnings[:3]))
-    elif counts.get("dropped_candidates"):
-        pieces.append(
-            f"Trace note: {counts.get('dropped_candidates')} low-confidence normalization candidate(s) were dropped."
-        )
-    else:
-        pieces.append("No major trace warnings were present in the optimized payload.")
-
-    return " ".join(pieces)
-
-
-def _llm_optimized_result(
-    result: Dict[str, Any],
-    *,
-    job_id: Optional[str] = None,
-    elapsed_seconds: Optional[float] = None,
-    max_results: int = 3,
-    include_abstracts: bool = True,
-    max_abstract_chars: int = 700,
-) -> Dict[str, Any]:
-    """
-    Small payload intended to be fed into OpenClaw / LLM context.
-
-    This preserves enough information for an agentic summary while avoiding the
-    full raw broker response, full provenance, full traces, and full graph.
-    """
-    if not isinstance(result, dict):
-        return {
-            "ok": False,
-            "response_profile": "llm_optimized",
-            "error": "Result was not a dictionary.",
-            "raw_result_type": type(result).__name__,
+    return _remove_empty(
+        {
+            "id": f"P{paper_index}",
+            "title": _clean_text(article.get("title")),
+            "year": article.get("year"),
+            "journal": _clean_text(article.get("journal")),
+            "pmid": article.get("pmid"),
+            "pmcid": article.get("pmcid"),
+            "doi": article.get("doi"),
+            "abstract": _clean_text(
+                article.get("abstract_excerpt") or article.get("abstract"),
+                max_chars=max_abstract_chars,
+            ),
         }
-
-    max_results = max(1, min(int(max_results), 10))
-    max_abstract_chars = max(0, min(int(max_abstract_chars), 2000))
-
-    normalized_bundle = result.get("normalized_bundle") or {}
-    entities_raw = normalized_bundle.get("entities") or []
-    alternatives_raw = normalized_bundle.get("alternatives") or []
-    articles_raw = result.get("literature_results") or []
-
-    entities = [
-        _brief_entity(entity)
-        for entity in entities_raw[:8]
-        if isinstance(entity, dict)
-    ]
-
-    alternatives = [
-        _brief_entity(entity)
-        for entity in alternatives_raw[:5]
-        if isinstance(entity, dict)
-    ]
-
-    articles = [
-        _brief_literature_result(
-            article,
-            include_abstracts=include_abstracts,
-            max_abstract_chars=max_abstract_chars,
-        )
-        for article in articles_raw[:max_results]
-        if isinstance(article, dict)
-    ]
-
-    trace = _trace_summary(result)
-
-    return {
-        "ok": True,
-        "response_profile": "llm_optimized",
-        "job_id": job_id,
-        "elapsed_seconds": elapsed_seconds,
-        "summary_text": _make_summary_text(
-            entities=entities,
-            literature_results=articles,
-            trace_summary=trace,
-        ),
-        "interpreted_entities": entities,
-        "alternative_entities": alternatives,
-        "top_literature_results": articles,
-        "result_counts": {
-            "interpreted_entities": len(entities_raw),
-            "alternative_entities": len(alternatives_raw),
-            "literature_results": len(articles_raw),
-        },
-        "structured_evidence_counts": _structured_evidence_summary(result),
-        "evidence_graph_summary": _graph_summary(result),
-        "trace_summary": trace,
-    }
-
-
-def _compact_result(
-    result: Dict[str, Any],
-    *,
-    max_literature_results: int = 5,
-    include_abstracts: bool = True,
-    max_abstract_chars: int = 1000,
-) -> Dict[str, Any]:
-    """
-    Medium-size debug payload.
-
-    This is intentionally larger than the LLM-optimized profile but still avoids
-    dumping raw PubMed records and full traces.
-    """
-    if not isinstance(result, dict):
-        return {"raw_result": result}
-
-    max_literature_results = max(1, min(int(max_literature_results), 25))
-
-    normalized_bundle = result.get("normalized_bundle") or {}
-    entities_raw = normalized_bundle.get("entities") or []
-    alternatives_raw = normalized_bundle.get("alternatives") or []
-    articles_raw = result.get("literature_results") or []
-
-    compact = {
-        "response_profile": "compact_debug",
-        "normalized_bundle": {
-            "entities": [
-                _brief_entity(entity)
-                for entity in entities_raw
-                if isinstance(entity, dict)
-            ],
-            "alternatives": [
-                _brief_entity(entity)
-                for entity in alternatives_raw[:10]
-                if isinstance(entity, dict)
-            ],
-        },
-        "literature_results": [
-            _brief_literature_result(
-                article,
-                include_abstracts=include_abstracts,
-                max_abstract_chars=max_abstract_chars,
-            )
-            for article in articles_raw[:max_literature_results]
-            if isinstance(article, dict)
-        ],
-        "structured_evidence_counts": _structured_evidence_summary(result),
-        "evidence_graph_summary": _graph_summary(result),
-        "trace_summary": _trace_summary(result),
-        "result_counts": {
-            "interpreted_entities": len(entities_raw),
-            "alternative_entities": len(alternatives_raw),
-            "literature_results": len(articles_raw),
-        },
-    }
-
-    return compact
-
-
-def _load_full_result_or_fallback(job: Dict[str, Any], job_id: str) -> Dict[str, Any]:
-    debug = job.get("debug") or {}
-
-    # New jobs store full result here.
-    full_result_path = debug.get("full_result_path")
-    if full_result_path:
-        loaded = _read_json_file(Path(full_result_path))
-        if loaded is not None:
-            return loaded
-
-    # Fallback by convention.
-    loaded = _read_json_file(_full_result_path(job_id))
-    if loaded is not None:
-        return loaded
-
-    # Older jobs may have a compact or full-ish result embedded directly.
-    result = job.get("result")
-    if isinstance(result, dict):
-        return result
-
-    return {}
-
-
-def _build_result_response(
-    *,
-    job_id: Optional[str],
-    elapsed_seconds: Optional[float],
-    result: Dict[str, Any],
-    response_profile: str,
-    max_results: int,
-    include_abstracts: bool,
-    max_abstract_chars: int,
-) -> Dict[str, Any]:
-    profile = (response_profile or "summary").strip().lower()
-
-    if profile in {"summary", "llm", "llm_optimized", "optimized"}:
-        optimized = _llm_optimized_result(
-            result,
-            job_id=job_id,
-            elapsed_seconds=elapsed_seconds,
-            max_results=max_results,
-            include_abstracts=include_abstracts,
-            max_abstract_chars=max_abstract_chars,
-        )
-
-        return {
-            "ok": True,
-            "response_profile": "llm_optimized",
-            "result": optimized,
-            "debug": {
-                "returned_size_bytes": _json_size_bytes(optimized),
-            },
-        }
-
-    if profile in {"compact", "debug"}:
-        compact = _compact_result(
-            result,
-            max_literature_results=max_results,
-            include_abstracts=include_abstracts,
-            max_abstract_chars=max_abstract_chars,
-        )
-
-        return {
-            "ok": True,
-            "response_profile": "compact_debug",
-            "result": compact,
-            "debug": {
-                "returned_size_bytes": _json_size_bytes(compact),
-            },
-        }
-
-    if profile == "full":
-        return {
-            "ok": True,
-            "response_profile": "full",
-            "warning": "Full result can be very large and expensive to send to an LLM. Use only for debugging.",
-            "result": result,
-            "debug": {
-                "returned_size_bytes": _json_size_bytes(result),
-            },
-        }
-
-    return {
-        "ok": False,
-        "error": f"Unknown response_profile: {response_profile}",
-        "valid_response_profiles": ["summary", "compact", "full"],
-    }
-
-
-async def _safe_client_progress(
-    ctx: Optional[Context],
-    *,
-    call_id: str,
-    elapsed: float,
-    timeout_seconds: float,
-    message: str,
-) -> None:
-    if ctx is None:
-        return
-
-    try:
-        progress = min(elapsed, timeout_seconds)
-        await ctx.info(f"[{call_id}] {message} elapsed={elapsed:.1f}s")
-        await ctx.report_progress(
-            progress=progress,
-            total=timeout_seconds,
-            message=message,
-        )
-    except Exception as exc:
-        logger.debug("[%s] Progress notification failed: %s", call_id, exc)
-
-
-async def _run_with_logging(
-    *,
-    tool_name: str,
-    call_id: str,
-    coro,
-    timeout_seconds: float,
-    ctx: Optional[Context] = None,
-    heartbeat_seconds: float = 10.0,
-    response_profile: str = "summary",
-    max_results: int = 3,
-    include_abstracts: bool = True,
-    max_abstract_chars: int = 700,
-) -> Dict[str, Any]:
-    """
-    Run a coroutine with logging, optional MCP progress messages, and a timeout.
-
-    Direct tools now default to an LLM-optimized payload instead of returning the
-    full broker JSON.
-    """
-    start = time.perf_counter()
-    timeout_seconds = float(timeout_seconds)
-    logger.info("[%s] START tool=%s timeout=%.1fs", call_id, tool_name, timeout_seconds)
-
-    task = asyncio.create_task(coro)
-
-    await _safe_client_progress(
-        ctx,
-        call_id=call_id,
-        elapsed=0.0,
-        timeout_seconds=timeout_seconds,
-        message=f"{tool_name} started",
     )
 
-    try:
-        while True:
-            elapsed = time.perf_counter() - start
-            remaining = timeout_seconds - elapsed
 
-            if remaining <= 0:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+def _article_from_full_broker_record(
+    article: Dict[str, Any],
+    *,
+    paper_index: int,
+    max_abstract_chars: int,
+) -> Dict[str, Any]:
+    return _remove_empty(
+        {
+            "id": f"P{paper_index}",
+            "title": _clean_text(article.get("title")),
+            "year": article.get("year"),
+            "journal": _clean_text(article.get("journal")),
+            "pmid": article.get("pmid"),
+            "pmcid": article.get("pmcid"),
+            "doi": article.get("doi"),
+            "abstract": _clean_text(article.get("abstract"), max_chars=max_abstract_chars),
+        }
+    )
 
-                logger.error(
-                    "[%s] TIMEOUT tool=%s elapsed=%.3fs timeout=%.1fs",
-                    call_id,
-                    tool_name,
-                    elapsed,
-                    timeout_seconds,
-                )
 
-                return {
-                    "ok": False,
-                    "call_id": call_id,
-                    "tool_name": tool_name,
-                    "elapsed_seconds": round(elapsed, 3),
-                    "error_type": "TimeoutError",
-                    "error": f"MCP tool timed out after {timeout_seconds:.1f} seconds",
-                    "broker_base_url": BROKER_BASE_URL,
-                    "debug": {
-                        "log_path": str(LOG_PATH),
-                    },
-                }
+def _abstract_pack_from_agent_payload(
+    agent_payload: Dict[str, Any],
+    *,
+    offset: int = 0,
+    max_results: int = 10,
+    max_abstract_chars: int = 900,
+    include_trace_warnings: bool = True,
+) -> Dict[str, Any]:
+    """
+    Convert a UI-generated .agent.json payload into a tiny LLM-facing abstract pack.
 
-            done, _pending = await asyncio.wait(
-                {task},
-                timeout=min(heartbeat_seconds, remaining),
-                return_when=asyncio.FIRST_COMPLETED,
+    This function supports batching via offset. If offset=20 and max_results=10,
+    returned papers are P21-P30.
+    """
+    offset = max(0, int(offset))
+    max_results = max(1, min(int(max_results), 100))
+    max_abstract_chars = max(100, min(int(max_abstract_chars), 3000))
+
+    query_summary = agent_payload.get("query_summary") or {}
+    raw_results = agent_payload.get("top_literature_results") or []
+    end = offset + max_results
+
+    papers: List[Dict[str, Any]] = []
+    for local_index, article in enumerate(raw_results[offset:end], start=1):
+        if not isinstance(article, dict):
+            continue
+        absolute_index = offset + local_index
+        papers.append(
+            _article_from_agent_record(
+                article,
+                paper_index=absolute_index,
+                max_abstract_chars=max_abstract_chars,
             )
-
-            if task in done:
-                result = await task
-                elapsed = time.perf_counter() - start
-
-                original_size = _json_size_bytes(result)
-                payload = _build_result_response(
-                    job_id=None,
-                    elapsed_seconds=round(elapsed, 3),
-                    result=result,
-                    response_profile=response_profile,
-                    max_results=max_results,
-                    include_abstracts=include_abstracts,
-                    max_abstract_chars=max_abstract_chars,
-                )
-                returned_size = _json_size_bytes(payload)
-
-                logger.info(
-                    "[%s] DONE tool=%s elapsed=%.3fs original_size=%s returned_size=%s profile=%s",
-                    call_id,
-                    tool_name,
-                    elapsed,
-                    original_size,
-                    returned_size,
-                    response_profile,
-                )
-
-                await _safe_client_progress(
-                    ctx,
-                    call_id=call_id,
-                    elapsed=elapsed,
-                    timeout_seconds=timeout_seconds,
-                    message=f"{tool_name} completed",
-                )
-
-                payload.update(
-                    {
-                        "call_id": call_id,
-                        "tool_name": tool_name,
-                        "elapsed_seconds": round(elapsed, 3),
-                        "broker_base_url": BROKER_BASE_URL,
-                    }
-                )
-                payload.setdefault("debug", {})
-                payload["debug"].update(
-                    {
-                        "original_size_bytes": original_size,
-                        "returned_size_bytes": returned_size,
-                        "log_path": str(LOG_PATH),
-                    }
-                )
-
-                return payload
-
-            elapsed = time.perf_counter() - start
-            logger.info(
-                "[%s] HEARTBEAT tool=%s elapsed=%.1fs timeout=%.1fs",
-                call_id,
-                tool_name,
-                elapsed,
-                timeout_seconds,
-            )
-
-            await _safe_client_progress(
-                ctx,
-                call_id=call_id,
-                elapsed=elapsed,
-                timeout_seconds=timeout_seconds,
-                message=f"{tool_name} still waiting for broker response",
-            )
-
-    except Exception as exc:
-        elapsed = time.perf_counter() - start
-        tb = traceback.format_exc()
-
-        logger.error(
-            "[%s] ERROR tool=%s elapsed=%.3fs error=%s: %s\n%s",
-            call_id,
-            tool_name,
-            elapsed,
-            type(exc).__name__,
-            exc,
-            tb,
         )
 
-        try:
-            if ctx is not None:
-                await ctx.error(f"[{call_id}] {tool_name} failed: {type(exc).__name__}: {exc}")
-        except Exception:
-            pass
+    trace_summary = agent_payload.get("trace_summary") or {}
+    warnings: List[str] = []
+    if include_trace_warnings:
+        for key in ("pipeline_warnings", "normalization_warnings"):
+            values = trace_summary.get(key) or []
+            if isinstance(values, list):
+                warnings.extend(str(v) for v in values if v)
 
-        return {
-            "ok": False,
-            "call_id": call_id,
-            "tool_name": tool_name,
-            "elapsed_seconds": round(elapsed, 3),
-            "error_type": type(exc).__name__,
-            "error": str(exc),
-            "traceback": tb[-4000:],
-            "broker_base_url": BROKER_BASE_URL,
-            "debug": {
-                "log_path": str(LOG_PATH),
-            },
+    return _remove_empty(
+        {
+            "response_profile": "abstract_pack",
+            "source": "ui_runs.agent_json",
+            "literature_result_count": query_summary.get("literature_result_count"),
+            "available_paper_count": len(raw_results),
+            "offset": offset,
+            "requested_paper_count": max_results,
+            "returned_paper_count": len(papers),
+            "paper_id_range": f"P{offset + 1}-P{offset + len(papers)}" if papers else None,
+            "papers": papers,
+            "warnings": warnings[:5],
+            "citation_instructions": (
+                "When making claims from a paper, cite the local paper id like [P1], [P2]. "
+                "Use PMID/DOI fields for verification when available."
+            ),
         }
+    )
 
+
+def _abstract_pack_from_full_result(
+    full_result: Dict[str, Any],
+    *,
+    offset: int = 0,
+    max_results: int = 10,
+    max_abstract_chars: int = 900,
+) -> Dict[str, Any]:
+    offset = max(0, int(offset))
+    max_results = max(1, min(int(max_results), 100))
+    max_abstract_chars = max(100, min(int(max_abstract_chars), 3000))
+
+    literature_results = full_result.get("literature_results") or []
+    end = offset + max_results
+
+    papers: List[Dict[str, Any]] = []
+    for local_index, article in enumerate(literature_results[offset:end], start=1):
+        if not isinstance(article, dict):
+            continue
+        absolute_index = offset + local_index
+        papers.append(
+            _article_from_full_broker_record(
+                article,
+                paper_index=absolute_index,
+                max_abstract_chars=max_abstract_chars,
+            )
+        )
+
+    trace = full_result.get("trace") or {}
+
+    return _remove_empty(
+        {
+            "response_profile": "abstract_pack",
+            "source": "mcp_job.full_json",
+            "literature_result_count": len(literature_results),
+            "available_paper_count": len(literature_results),
+            "offset": offset,
+            "requested_paper_count": max_results,
+            "returned_paper_count": len(papers),
+            "paper_id_range": f"P{offset + 1}-P{offset + len(papers)}" if papers else None,
+            "papers": papers,
+            "warnings": (trace.get("warnings") or [])[:5],
+            "citation_instructions": (
+                "When making claims from a paper, cite the local paper id like [P1], [P2]. "
+                "Use PMID/DOI fields for verification when available."
+            ),
+        }
+    )
+
+
+def _make_batch_plan(
+    *,
+    total_available: int,
+    papers_to_process: int,
+    batch_size: int,
+) -> List[Dict[str, int]]:
+    papers_to_process = max(1, min(int(papers_to_process), int(total_available)))
+    batch_size = max(1, min(int(batch_size), 100))
+
+    batches = []
+    for offset in range(0, papers_to_process, batch_size):
+        count = min(batch_size, papers_to_process - offset)
+        batches.append(
+            {
+                "batch_number": len(batches) + 1,
+                "offset": offset,
+                "max_results": count,
+                "first_paper_id": offset + 1,
+                "last_paper_id": offset + count,
+            }
+        )
+
+    return batches
+
+
+# ---------------------------------------------------------------------------
+# Background evidence query jobs
+# ---------------------------------------------------------------------------
 
 async def _run_evidence_job(
     *,
@@ -895,12 +403,6 @@ async def _run_evidence_job(
     deep_search: bool,
     timeout_seconds: float,
 ) -> None:
-    """
-    Run a broker query in the MCP server background loop and store the result.
-
-    Full output is stored on disk for verification.
-    The job metadata stores only the LLM-optimized result.
-    """
     start = time.perf_counter()
 
     job = _read_job(job_id) or {}
@@ -948,34 +450,10 @@ async def _run_evidence_job(
         )
 
         elapsed = time.perf_counter() - start
-
-        summary_result = _llm_optimized_result(
-            result,
-            job_id=job_id,
-            elapsed_seconds=round(elapsed, 3),
-            max_results=3,
-            include_abstracts=True,
-            max_abstract_chars=700,
-        )
-
-        compact_result = _compact_result(
-            result,
-            max_literature_results=5,
-            include_abstracts=True,
-            max_abstract_chars=1000,
-        )
-
         full_path = _full_result_path(job_id)
-        compact_path = _compact_result_path(job_id)
-
-        # Keep full result for future verification and debugging, but do not
-        # return it to OpenClaw by default.
         _write_json_atomic(full_path, result)
-        _write_json_atomic(compact_path, compact_result)
 
-        full_size = _json_size_bytes(result)
-        compact_size = _json_size_bytes(compact_result)
-        summary_size = _json_size_bytes(summary_result)
+        literature_results = result.get("literature_results") or []
 
         job.update(
             {
@@ -983,32 +461,29 @@ async def _run_evidence_job(
                 "completed_at": _now(),
                 "elapsed_seconds": round(elapsed, 3),
                 "message": "Broker query completed.",
-                "result": summary_result,
+                "result_summary": {
+                    "literature_result_count": len(literature_results),
+                    "full_result_size_bytes": _json_size_bytes(result),
+                },
                 "debug": {
                     "log_path": str(LOG_PATH),
                     "job_path": str(_job_path(job_id)),
                     "full_result_path": str(full_path),
-                    "compact_result_path": str(compact_path),
-                    "summary_size_bytes": summary_size,
-                    "compact_size_bytes": compact_size,
-                    "full_size_bytes": full_size,
                 },
             }
         )
         _write_job(job_id, job)
 
         logger.info(
-            "[%s] JOB DONE elapsed=%.3fs summary_size=%s compact_size=%s full_size=%s",
+            "[%s] JOB DONE elapsed=%.3fs literature_results=%s full_size=%s",
             job_id,
             elapsed,
-            summary_size,
-            compact_size,
-            full_size,
+            len(literature_results),
+            _json_size_bytes(result),
         )
 
     except asyncio.TimeoutError:
         elapsed = time.perf_counter() - start
-
         job.update(
             {
                 "status": "failed",
@@ -1024,7 +499,6 @@ async def _run_evidence_job(
             }
         )
         _write_job(job_id, job)
-
         logger.error("[%s] JOB TIMEOUT elapsed=%.3fs timeout=%.1fs", job_id, elapsed, timeout_seconds)
 
     except Exception as exc:
@@ -1058,11 +532,13 @@ async def _run_evidence_job(
         )
 
 
+# ---------------------------------------------------------------------------
+# MCP tools: health
+# ---------------------------------------------------------------------------
+
 @mcp.tool(name="evidence_ping")
 async def evidence_ping(ctx: Optional[Context] = None) -> Dict[str, Any]:
-    """
-    Fast no-broker smoke test.
-    """
+    """Fast MCP smoke test."""
     call_id = str(uuid4())
     logger.info("[%s] evidence_ping called", call_id)
 
@@ -1078,9 +554,7 @@ async def evidence_ping(ctx: Optional[Context] = None) -> Dict[str, Any]:
 
 @mcp.tool(name="evidence_broker_health")
 async def evidence_broker_health(ctx: Optional[Context] = None) -> Dict[str, Any]:
-    """
-    Fast broker connectivity test.
-    """
+    """Check that the MCP server can reach the local broker."""
     call_id = str(uuid4())
     start = time.perf_counter()
     logger.info("[%s] evidence_broker_health START", call_id)
@@ -1111,7 +585,6 @@ async def evidence_broker_health(ctx: Optional[Context] = None) -> Dict[str, Any
     except Exception as exc:
         elapsed = time.perf_counter() - start
         logger.exception("[%s] evidence_broker_health ERROR elapsed=%.3fs", call_id, elapsed)
-
         return {
             "ok": False,
             "elapsed_seconds": round(elapsed, 3),
@@ -1121,134 +594,153 @@ async def evidence_broker_health(ctx: Optional[Context] = None) -> Dict[str, Any
         }
 
 
-@mcp.tool(name="evidence_query_fast")
-async def evidence_query_fast_tool(
-    raw_query: str,
-    expected_entity_types: Optional[List[str]] = None,
-    literature_keywords: Optional[str] = None,
-    timeout_seconds: float = 300.0,
-    response_profile: str = "summary",
-    max_results: int = 3,
-    include_abstracts: bool = True,
-    max_abstract_chars: int = 700,
-    ctx: Optional[Context] = None,
+# ---------------------------------------------------------------------------
+# MCP tools: UI payload reading and batching
+# ---------------------------------------------------------------------------
+
+@mcp.tool(name="evidence_read_agent_payload")
+async def evidence_read_agent_payload_tool(
+    path_or_name: str,
+    offset: int = 0,
+    max_results: int = 10,
+    max_abstract_chars: int = 900,
+    include_trace_warnings: bool = True,
 ) -> Dict[str, Any]:
-    """
-    Direct evidence query.
+    """Read ui_runs/*.agent.json and return one abstract batch."""
+    try:
+        path = _safe_ui_run_path(path_or_name)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+            "hint": "Pass a filename like 20260518_213248.agent.json or ui_runs/20260518_213248.agent.json.",
+        }
 
-    Defaults to a small LLM-optimized result. Use response_profile="full" only
-    for debugging because it can be very large.
-    """
-    call_id = str(uuid4())
-    timeout_seconds = max(float(timeout_seconds), 300.0)
+    if not path.exists():
+        return {
+            "ok": False,
+            "error_type": "FileNotFoundError",
+            "error": f"Could not find UI payload file: {path}",
+            "available_files": [
+                p.name
+                for p in sorted(
+                    UI_RUNS_DIR.glob("*.agent.json"),
+                    key=lambda p: p.stat().st_mtime,
+                    reverse=True,
+                )[:10]
+            ],
+        }
 
-    logger.info(
-        "[%s] evidence_query_fast args raw_query=%r expected_entity_types=%r "
-        "literature_keywords=%r timeout_seconds=%.1f response_profile=%r",
-        call_id,
-        raw_query,
-        expected_entity_types,
-        literature_keywords,
-        timeout_seconds,
-        response_profile,
-    )
+    payload = _read_json_file(path)
+    if payload is None:
+        return {
+            "ok": False,
+            "error_type": "JSONDecodeError",
+            "error": f"Could not parse UI payload file: {path}",
+            "path": str(path),
+        }
 
-    return await _run_with_logging(
-        tool_name="evidence_query_fast",
-        call_id=call_id,
-        timeout_seconds=timeout_seconds,
-        ctx=ctx,
-        heartbeat_seconds=10.0,
-        response_profile=response_profile,
+    abstract_pack = _abstract_pack_from_agent_payload(
+        payload,
+        offset=offset,
         max_results=max_results,
-        include_abstracts=include_abstracts,
         max_abstract_chars=max_abstract_chars,
-        coro=evidence_query(
-            raw_query=raw_query,
-            expected_entity_types=expected_entity_types,
-            literature_keywords=literature_keywords,
-            literature_filters={"retmax": 1},
-            include_structured_evidence=False,
-            requested_evidence_types=["genes", "diseases", "variants"],
-            deep_search=False,
-            broker_base_url=BROKER_BASE_URL,
-            timeout_seconds=timeout_seconds,
-        ),
+        include_trace_warnings=include_trace_warnings,
     )
 
+    return {
+        "ok": True,
+        "path": str(path),
+        "result": abstract_pack,
+        "debug": {
+            "original_size_bytes": _json_size_bytes(payload),
+            "returned_size_bytes": _json_size_bytes(abstract_pack),
+        },
+    }
 
-@mcp.tool(name="evidence_query")
-async def evidence_query_tool(
-    raw_query: str,
-    expected_entity_types: Optional[List[str]] = None,
-    literature_keywords: Optional[str] = None,
-    literature_filters: Optional[Dict[str, Any]] = None,
-    include_structured_evidence: bool = False,
-    requested_evidence_types: Optional[List[str]] = None,
-    deep_search: bool = False,
-    timeout_seconds: float = 300.0,
-    response_profile: str = "summary",
-    max_results: int = 3,
-    include_abstracts: bool = True,
+
+@mcp.tool(name="evidence_plan_agent_payload_batches")
+async def evidence_plan_agent_payload_batches_tool(
+    path_or_name: str,
+    papers_to_process: int = 100,
+    batch_size: int = 20,
     max_abstract_chars: int = 700,
-    ctx: Optional[Context] = None,
 ) -> Dict[str, Any]:
-    """
-    Direct configurable evidence query.
+    """Return a batch plan for a saved ui_runs/*.agent.json file."""
+    try:
+        path = _safe_ui_run_path(path_or_name)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
 
-    Defaults to a small LLM-optimized result. Use response_profile="compact" or
-    "full" only when debugging.
-    """
-    call_id = str(uuid4())
-    filters = dict(literature_filters or {})
-    timeout_seconds = max(float(timeout_seconds), 300.0)
+    if not path.exists():
+        return {
+            "ok": False,
+            "error_type": "FileNotFoundError",
+            "error": f"Could not find UI payload file: {path}",
+        }
 
-    if deep_search:
-        filters.setdefault("retmax", 5)
-        include_structured_evidence = True
-    else:
-        filters["retmax"] = min(int(filters.get("retmax", 3)), 3)
-        include_structured_evidence = False
+    payload = _read_json_file(path)
+    if payload is None:
+        return {
+            "ok": False,
+            "error_type": "JSONDecodeError",
+            "error": f"Could not parse UI payload file: {path}",
+        }
 
-    logger.info(
-        "[%s] evidence_query args raw_query=%r expected_entity_types=%r literature_keywords=%r "
-        "literature_filters=%r include_structured_evidence=%r requested_evidence_types=%r "
-        "deep_search=%r timeout_seconds=%.1f response_profile=%r",
-        call_id,
-        raw_query,
-        expected_entity_types,
-        literature_keywords,
-        filters,
-        include_structured_evidence,
-        requested_evidence_types,
-        deep_search,
-        timeout_seconds,
-        response_profile,
+    available = len(payload.get("top_literature_results") or [])
+    batches = _make_batch_plan(
+        total_available=available,
+        papers_to_process=papers_to_process,
+        batch_size=batch_size,
     )
 
-    return await _run_with_logging(
-        tool_name="evidence_query",
-        call_id=call_id,
-        timeout_seconds=timeout_seconds,
-        ctx=ctx,
-        heartbeat_seconds=10.0,
-        response_profile=response_profile,
-        max_results=max_results,
-        include_abstracts=include_abstracts,
-        max_abstract_chars=max_abstract_chars,
-        coro=evidence_query(
-            raw_query=raw_query,
-            expected_entity_types=expected_entity_types,
-            literature_keywords=literature_keywords,
-            literature_filters=filters,
-            include_structured_evidence=include_structured_evidence,
-            requested_evidence_types=requested_evidence_types,
-            deep_search=deep_search,
-            broker_base_url=BROKER_BASE_URL,
-            timeout_seconds=timeout_seconds,
+    return {
+        "ok": True,
+        "path": str(path),
+        "available_paper_count": available,
+        "papers_to_process": min(papers_to_process, available),
+        "batch_size": batch_size,
+        "max_abstract_chars": max_abstract_chars,
+        "batch_count": len(batches),
+        "batches": batches,
+        "usage": (
+            "Call evidence_read_agent_payload once per batch using the returned offset "
+            "and max_results values. Then synthesize the batch summaries."
         ),
-    )
+    }
 
+
+@mcp.tool(name="evidence_list_ui_payloads")
+async def evidence_list_ui_payloads_tool(limit: int = 10) -> Dict[str, Any]:
+    """List recent UI-generated *.agent.json files."""
+    limit = max(1, min(int(limit), 50))
+
+    files = []
+    for path in sorted(UI_RUNS_DIR.glob("*.agent.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:limit]:
+        files.append(
+            {
+                "name": path.name,
+                "path": str(path),
+                "size_bytes": path.stat().st_size,
+                "modified_at": path.stat().st_mtime,
+            }
+        )
+
+    return {
+        "ok": True,
+        "ui_runs_dir": str(UI_RUNS_DIR),
+        "files": files,
+    }
+
+
+# ---------------------------------------------------------------------------
+# MCP tools: optional background broker jobs
+# ---------------------------------------------------------------------------
 
 @mcp.tool(name="evidence_query_start")
 async def evidence_query_start_tool(
@@ -1262,21 +754,17 @@ async def evidence_query_start_tool(
     timeout_seconds: float = 300.0,
     ctx: Optional[Context] = None,
 ) -> Dict[str, Any]:
-    """
-    Start a long evidence query in the background and return immediately.
-
-    This is the recommended OpenClaw path.
-    """
+    """Start a long broker query in the background and return a job_id."""
     job_id = str(uuid4())
     filters = dict(literature_filters or {})
     timeout_seconds = max(float(timeout_seconds), 300.0)
 
     if deep_search:
-        filters.setdefault("retmax", 5)
+        filters.setdefault("retmax", 10)
         include_structured_evidence = True
     else:
-        filters["retmax"] = min(int(filters.get("retmax", 3)), 3)
-        include_structured_evidence = False
+        # Do not silently cap retmax here; the UI may intentionally request large harvests.
+        filters.setdefault("retmax", 10)
 
     job = {
         "job_id": job_id,
@@ -1300,7 +788,6 @@ async def evidence_query_start_tool(
             "log_path": str(LOG_PATH),
             "job_path": str(_job_path(job_id)),
             "full_result_path": str(_full_result_path(job_id)),
-            "compact_result_path": str(_compact_result_path(job_id)),
         },
     }
     _write_job(job_id, job)
@@ -1324,7 +811,6 @@ async def evidence_query_start_tool(
     if ctx is not None:
         await ctx.info(f"[{job_id}] evidence query started in background")
 
-    # Keep this tiny. OpenClaw only needs the job_id.
     return {
         "ok": True,
         "job_id": job_id,
@@ -1334,29 +820,19 @@ async def evidence_query_start_tool(
 
 
 @mcp.tool(name="evidence_query_status")
-async def evidence_query_status_tool(
-    job_id: str,
-    include_debug: bool = False,
-) -> Dict[str, Any]:
-    """
-    Check the status of a background evidence query job.
-    """
+async def evidence_query_status_tool(job_id: str, include_debug: bool = False) -> Dict[str, Any]:
+    """Check the status of a background broker job."""
     job = _read_job(job_id)
 
     if job is None:
-        response = {
+        response: Dict[str, Any] = {
             "ok": False,
             "job_id": job_id,
             "status": "not_found",
             "message": "No such evidence query job was found.",
         }
-
         if include_debug:
-            response["debug"] = {
-                "jobs_dir": str(JOBS_DIR),
-                "log_path": str(LOG_PATH),
-            }
-
+            response["debug"] = {"jobs_dir": str(JOBS_DIR), "log_path": str(LOG_PATH)}
         return response
 
     if job.get("status") == "running":
@@ -1371,7 +847,7 @@ async def evidence_query_status_tool(
         "status": job.get("status"),
         "elapsed_seconds": job.get("elapsed_seconds"),
         "message": job.get("message"),
-        "has_result": "result" in job,
+        "result_summary": job.get("result_summary"),
         "error_type": job.get("error_type"),
         "error": job.get("error"),
     }
@@ -1382,204 +858,97 @@ async def evidence_query_status_tool(
     return response
 
 
-@mcp.tool(name="evidence_query_result")
-async def evidence_query_result_tool(
+@mcp.tool(name="evidence_query_summary")
+async def evidence_query_summary_tool(
     job_id: str,
-    response_profile: str = "summary",
-    max_results: int = 3,
-    include_abstracts: bool = True,
-    max_abstract_chars: int = 700,
-    include_debug: bool = False,
+    offset: int = 0,
+    max_results: int = 10,
+    max_abstract_chars: int = 900,
 ) -> Dict[str, Any]:
-    """
-    Fetch the result of a completed background evidence query job.
-
-    response_profile:
-    - "summary": default LLM-optimized payload
-    - "compact": medium debug payload
-    - "full": full broker JSON; expensive, use only for debugging
-    """
+    """Return one abstract batch from a completed background broker job."""
     job = _read_job(job_id)
 
     if job is None:
-        response = {
+        return {
             "ok": False,
             "job_id": job_id,
             "status": "not_found",
             "message": "No such evidence query job was found.",
         }
 
-        if include_debug:
-            response["debug"] = {
-                "jobs_dir": str(JOBS_DIR),
-                "log_path": str(LOG_PATH),
-            }
-
-        return response
-
-    status = job.get("status")
-
-    if status != "completed":
-        response = {
+    if job.get("status") != "completed":
+        return {
             "ok": False,
             "job_id": job_id,
-            "status": status,
+            "status": job.get("status"),
             "elapsed_seconds": job.get("elapsed_seconds"),
             "message": "Job is not completed yet. Call evidence_query_status again later.",
             "error_type": job.get("error_type"),
             "error": job.get("error"),
         }
 
-        if include_debug:
-            response["debug"] = job.get("debug")
+    full_path = Path((job.get("debug") or {}).get("full_result_path") or _full_result_path(job_id))
+    full_result = _read_json_file(full_path)
 
-        return response
-
-    response_profile_clean = (response_profile or "summary").strip().lower()
-
-    if response_profile_clean in {"summary", "llm", "llm_optimized", "optimized"}:
-        existing = job.get("result")
-
-        # New jobs already store the small LLM-optimized payload in job["result"].
-        # Regenerate only if caller asks for non-default options.
-        if (
-            isinstance(existing, dict)
-            and existing.get("response_profile") == "llm_optimized"
-            and int(max_results) == 3
-            and bool(include_abstracts) is True
-            and int(max_abstract_chars) == 700
-        ):
-            payload = existing
-        else:
-            full_result = _load_full_result_or_fallback(job, job_id)
-            payload = _llm_optimized_result(
-                full_result,
-                job_id=job_id,
-                elapsed_seconds=job.get("elapsed_seconds"),
-                max_results=max_results,
-                include_abstracts=include_abstracts,
-                max_abstract_chars=max_abstract_chars,
-            )
-
-        response = {
-            "ok": True,
+    if full_result is None:
+        return {
+            "ok": False,
             "job_id": job_id,
             "status": "completed",
-            "elapsed_seconds": job.get("elapsed_seconds"),
-            "response_profile": "summary",
-            "result": payload,
+            "error": f"Could not read full result file: {full_path}",
         }
 
-        if include_debug:
-            response["debug"] = {
-                **(job.get("debug") or {}),
-                "returned_size_bytes": _json_size_bytes(response),
-            }
-
-        return response
-
-    full_result = _load_full_result_or_fallback(job, job_id)
-
-    formatted = _build_result_response(
-        job_id=job_id,
-        elapsed_seconds=job.get("elapsed_seconds"),
-        result=full_result,
-        response_profile=response_profile_clean,
+    abstract_pack = _abstract_pack_from_full_result(
+        full_result,
+        offset=offset,
         max_results=max_results,
-        include_abstracts=include_abstracts,
         max_abstract_chars=max_abstract_chars,
     )
 
-    response = {
-        "ok": formatted.get("ok"),
+    return {
+        "ok": True,
         "job_id": job_id,
         "status": "completed",
         "elapsed_seconds": job.get("elapsed_seconds"),
-        "response_profile": formatted.get("response_profile"),
-        "result": formatted.get("result"),
+        "result": abstract_pack,
+        "debug": {
+            "returned_size_bytes": _json_size_bytes(abstract_pack),
+            "full_result_path": str(full_path),
+        },
     }
-
-    if formatted.get("warning"):
-        response["warning"] = formatted.get("warning")
-
-    if formatted.get("error"):
-        response["error"] = formatted.get("error")
-        response["valid_response_profiles"] = formatted.get("valid_response_profiles")
-
-    if include_debug:
-        response["debug"] = {
-            **(job.get("debug") or {}),
-            **(formatted.get("debug") or {}),
-            "returned_size_bytes": _json_size_bytes(response),
-        }
-
-    return response
-
-
-@mcp.tool(name="evidence_query_summary")
-async def evidence_query_summary_tool(
-    job_id: str,
-    max_results: int = 3,
-    include_abstracts: bool = True,
-    max_abstract_chars: int = 700,
-) -> Dict[str, Any]:
-    """
-    Return only the LLM-optimized result for a completed job.
-
-    This is the cheapest tool to use from OpenClaw after a job completes.
-    """
-    return await evidence_query_result_tool(
-        job_id=job_id,
-        response_profile="summary",
-        max_results=max_results,
-        include_abstracts=include_abstracts,
-        max_abstract_chars=max_abstract_chars,
-        include_debug=False,
-    )
 
 
 @mcp.tool(name="evidence_query_jobs")
-async def evidence_query_jobs_tool(
-    limit: int = 10,
-    include_debug: bool = False,
-) -> Dict[str, Any]:
-    """
-    List recent evidence query jobs.
-    """
+async def evidence_query_jobs_tool(limit: int = 10) -> Dict[str, Any]:
+    """List recent background broker jobs."""
     limit = max(1, min(int(limit), 50))
-
     jobs: List[Dict[str, Any]] = []
 
-    for path in sorted(JOBS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:limit]:
-        # Skip full/compact result files; this tool should list only job metadata files.
+    for path in sorted(JOBS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
         if path.name.endswith(".full.json") or path.name.endswith(".compact.json"):
             continue
 
         try:
             job = json.loads(path.read_text(encoding="utf-8"))
-
-            item = {
-                "job_id": job.get("job_id"),
-                "status": job.get("status"),
-                "elapsed_seconds": job.get("elapsed_seconds"),
-                "message": job.get("message"),
-                "created_at": job.get("created_at"),
-                "updated_at": job.get("updated_at"),
-            }
-
-            if include_debug:
-                item["debug"] = job.get("debug")
-
-            jobs.append(item)
-
+            jobs.append(
+                {
+                    "job_id": job.get("job_id"),
+                    "status": job.get("status"),
+                    "elapsed_seconds": job.get("elapsed_seconds"),
+                    "message": job.get("message"),
+                    "result_summary": job.get("result_summary"),
+                    "created_at": job.get("created_at"),
+                    "updated_at": job.get("updated_at"),
+                }
+            )
             if len(jobs) >= limit:
                 break
-
         except Exception:
             logger.exception("Failed to load job listing from %s", path)
 
     return {
         "ok": True,
+        "jobs_dir": str(JOBS_DIR),
         "count": len(jobs),
         "jobs": jobs,
     }
