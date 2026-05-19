@@ -419,7 +419,7 @@ def make_batch_prompt(
 
 This is batch {batch_number}, covering papers P{start_pid}-P{end_pid}.
 
-Using only the returned abstract_pack, write a batch note for this research question:
+Using only the returned abstract_pack, create a compact batch note for this research question:
 
 {task}
 
@@ -429,26 +429,46 @@ Synthesis mode:
 Batch extraction instructions:
 {profile["batch"]}
 
-In under {batch_word_limit} words:
+Then immediately call the rare-disease-evidence MCP tool evidence_save_batch_note with:
+- path_or_name="{filename}"
+- batch_number={batch_number}
+- offset={offset}
+- max_results={max_results}
+- note=<your compact batch note>
+- research_question="{task}"
+- synthesis_mode="{task_profile}"
+- replace_existing=true
+
+Batch note requirements:
+- Keep the note under {batch_word_limit} words.
 - Extract only evidence relevant to the research question and synthesis mode.
 - Identify direct evidence separately from indirect, background, review, modeling, or case/example evidence.
 - Note contradictions, uncertainty, missing denominators, and limitations when relevant.
 - Cite useful paper IDs like [P{start_pid}], [P{min(start_pid + 1, end_pid)}].
-- Do not answer the final question yet; only summarize this batch.
-- Do not request or print the full JSON or complete abstracts.
+- Do not answer the final question yet.
+- Do not print raw JSON, full abstracts, or the saved note text after calling evidence_save_batch_note.
 """
 
 
 def make_final_synthesis_prompt(
     *,
+    agent_payload_path: str,
     task: str,
     word_limit: int,
     task_profile: str,
     custom_focus: str = "",
 ) -> str:
+    filename = Path(agent_payload_path).name
     profile = get_profile_instructions(task_profile, custom_focus)
 
-    return f"""Using the batch notes above, answer the final research question:
+    return f"""Use the rare-disease-evidence MCP tool evidence_batch_notes_status with path_or_name="{filename}".
+
+Then use the rare-disease-evidence MCP tool evidence_read_batch_notes with:
+- path_or_name="{filename}"
+- max_note_chars=1200
+- max_notes=1000
+
+Using only the saved batch notes returned by evidence_read_batch_notes, answer the final research question:
 
 {task}
 
@@ -464,9 +484,9 @@ Required structure:
 1. Direct answer.
 2. Evidence basis: distinguish direct evidence from indirect/example/review/modeling evidence.
 3. Uncertainty and limitations.
-4. Citations: cite the most relevant local paper IDs mentioned in the batch notes, such as [P1], [P22].
+4. Citations: cite the most relevant local paper IDs mentioned in the saved batch notes, such as [P1], [P22].
 
-Do not ask for the full JSON.
+Do not ask for the full JSON or raw abstracts.
 """
 
 
@@ -482,7 +502,7 @@ def make_recursive_batch_prompt(
     task_profile: str,
     custom_focus: str = "",
 ) -> str:
-    """One prompt that asks OpenClaw to orchestrate all batch tool calls itself."""
+    """One prompt that asks OpenClaw to orchestrate batch reads and save notes to disk."""
     filename = Path(agent_payload_path).name
     profile = get_profile_instructions(task_profile, custom_focus)
 
@@ -502,34 +522,59 @@ Evidence extraction instructions:
 Final synthesis instructions:
 {profile["final"]}
 
+Important context-management rule:
+Do not keep long batch notes in chat. After each batch, immediately save the compact note with evidence_save_batch_note. Do not print raw JSON, full abstracts, or full batch notes.
+
 Use this workflow exactly:
 
-1. Call evidence_plan_agent_payload_batches with:
-   - path_or_name=\"{filename}\"
+1. Call evidence_clear_batch_notes with:
+   - path_or_name="{filename}"
+   - research_question="{task}"
+   - synthesis_mode="{task_profile}"
+
+2. Call evidence_plan_agent_payload_batches with:
+   - path_or_name="{filename}"
    - papers_to_process={papers_to_process}
    - batch_size={batch_size}
    - max_abstract_chars={max_abstract_chars}
 
-2. For every batch returned in the plan, call evidence_read_agent_payload with:
-   - path_or_name=\"{filename}\"
-   - offset=<batch.offset>
-   - max_results=<batch.max_results>
-   - max_abstract_chars={max_abstract_chars}
-   - include_trace_warnings=true
+3. For every batch returned in the plan:
+   a. Call evidence_read_agent_payload with:
+      - path_or_name="{filename}"
+      - offset=<batch.offset>
+      - max_results=<batch.max_results>
+      - max_abstract_chars={max_abstract_chars}
+      - include_trace_warnings=true
 
-3. For each batch, make a short working batch note under {batch_word_limit} words. Each batch note should:
-   - extract only evidence relevant to the research question and synthesis mode;
-   - separate direct evidence from indirect/example/review/modeling evidence;
-   - note contradictions, uncertainty, missing denominators, and limitations when relevant;
-   - cite relevant paper IDs like [P1], [P22].
+   b. Create a compact batch note under {batch_word_limit} words using only evidence relevant to the research question and synthesis mode.
 
-4. After all batches have been read, write the final answer in under {final_word_limit} words.
+   c. Immediately call evidence_save_batch_note with:
+      - path_or_name="{filename}"
+      - batch_number=<batch.batch_number>
+      - offset=<batch.offset>
+      - max_results=<batch.max_results>
+      - note=<your compact batch note>
+      - research_question="{task}"
+      - synthesis_mode="{task_profile}"
+      - replace_existing=true
+
+   d. Do not print the batch note after saving it. Continue to the next batch.
+
+4. After all batches have been saved, call evidence_batch_notes_status with:
+   - path_or_name="{filename}"
+
+5. Then call evidence_read_batch_notes with:
+   - path_or_name="{filename}"
+   - max_note_chars=1200
+   - max_notes=1000
+
+6. Use only the saved batch notes returned by evidence_read_batch_notes to write the final answer in under {final_word_limit} words.
 
 Final answer requirements:
 - Answer the specific research question directly.
-- Give precise numbers, clinical claims, or causal claims only if the batch evidence supports them.
+- Give precise numbers, clinical claims, or causal claims only if the saved notes support them.
 - If the evidence does not support a definitive answer, say that clearly and explain why.
-- Cite the most relevant paper IDs from across the batches.
+- Cite the most relevant paper IDs from across the saved notes.
 - Do not print raw JSON or complete abstracts.
 - Do not call response_profile=full.
 """
@@ -626,14 +671,14 @@ with st.sidebar:
         "Max abstract chars per paper",
         min_value=100,
         max_value=3000,
-        value=700,
+        value=600,
         step=100,
         help=(
-            "Maximum abstract characters saved per paper. 400–700 is usually enough for batch synthesis; "
-            "1000–2000 is more thorough but more expensive."
+            "Maximum abstract characters saved per paper. 400–800 is usually enough for large batch synthesis; "
+            "1000–2000 is more thorough but should be reserved for smaller runs."
         ),
     )
-    st.caption("Range: 100–3000 chars per paper. This is the main token-cost knob.")
+    st.caption("Range: 100–3000 chars per paper. This is the main token-cost knob; 400–800 is recommended for long runs.")
 
     timeout_seconds = st.slider(
         "Backend timeout seconds",
@@ -754,10 +799,10 @@ with st.sidebar:
         "Batch size",
         min_value=5,
         max_value=50,
-        value=25,
+        value=15,
         step=5,
         help=(
-            "Number of papers per OpenClaw batch. 20–30 is a good default; 50 is faster but heavier."
+            "Number of papers per OpenClaw batch. 10–20 is safest for long runs; 30–50 is faster but heavier."
         ),
     )
     st.caption("Range: 5–50 papers per MCP call. Keep this at or below 50 because the MCP reader caps large batches.")
@@ -766,10 +811,10 @@ with st.sidebar:
         "Batch note word limit",
         min_value=75,
         max_value=1000,
-        value=250,
+        value=120,
         step=25,
         help=(
-            "Maximum size of each internal batch note. Smaller notes make long runs more reliable."
+            "Maximum size of each compact saved batch note. Smaller notes make long runs more reliable."
         ),
     )
 
@@ -790,6 +835,25 @@ with st.sidebar:
         step=50,
         help="Word limit for the single-call prompt.",
     )
+
+    st.header("Batch safety estimate")
+    estimated_batch_chars = int(batch_size) * int(max_abstract_chars)
+    estimated_total_chars = int(papers_to_batch) * int(max_abstract_chars)
+
+    st.caption(f"Estimated abstract text per batch: {estimated_batch_chars:,} characters.")
+    st.caption(f"Estimated total abstract text requested: {estimated_total_chars:,} characters.")
+
+    if estimated_batch_chars > 30000:
+        st.error(
+            "This batch is too large for reliable interactive OpenClaw use. "
+            "Lower Batch size or Max abstract chars per paper."
+        )
+    elif estimated_batch_chars > 20000:
+        st.warning(
+            "This is a large batch. It may work, but can still hit TPM limits or slow down the TUI."
+        )
+    else:
+        st.success("Batch size looks reasonable for interactive processing.")
 
 
 
@@ -1171,14 +1235,14 @@ if "last_agent_payload" in st.session_state:
         value=recursive_prompt,
         height=520,
         help=(
-            "Paste this once into OpenClaw. It tells OpenClaw to call the MCP planning tool, "
-            "then recursively read each abstract batch and synthesize the final answer."
+            "Paste this once into OpenClaw. It tells OpenClaw to plan batches, read each abstract batch, "
+            "save compact batch notes to disk, then synthesize from the saved notes."
         ),
     )
 
     st.info(
-        "This is the recommended workflow. OpenClaw should call evidence_plan_agent_payload_batches once, "
-        "then call evidence_read_agent_payload once per batch, then produce one final synthesis."
+        "This is the recommended long-run workflow. OpenClaw should clear old notes, plan batches, "
+        "read each abstract batch, save a compact note with evidence_save_batch_note, then synthesize only from saved notes."
     )
 
     with st.expander("Manual fallback: individual batch prompts"):
@@ -1209,6 +1273,7 @@ if "last_agent_payload" in st.session_state:
             )
 
         final_prompt = make_final_synthesis_prompt(
+            agent_payload_path=st.session_state["last_agent_path"],
             task=query,
             word_limit=final_word_limit_value,
             task_profile=task_profile_value,
@@ -1237,7 +1302,7 @@ if "last_agent_payload" in st.session_state:
     combined_prompts = "\n\n" + ("-" * 80) + "\n\n"
     combined_prompts = combined_prompts.join(
         [
-            "RECOMMENDED RECURSIVE OPENCLAW PROMPT\n\n" + recursive_prompt,
+            "RECOMMENDED SAVED-NOTE RECURSIVE OPENCLAW PROMPT\n\n" + recursive_prompt,
             "MANUAL BATCH PROMPTS\n\n" + "\n\n".join(batch_prompts),
             "FINAL SYNTHESIS PROMPT\n\n" + final_prompt,
             "INLINE SINGLE-PASS FALLBACK PROMPT\n\n" + inline_prompt,
@@ -1258,6 +1323,9 @@ Single-pass abstract pack:
 
 Batch plan:
 {st.session_state["last_batch_plan_path"]}
+
+Saved batch notes will be written by MCP to:
+ui_runs/batch_notes/{Path(st.session_state["last_agent_path"]).name.replace(".agent.json", ".batch_notes.json")}
 
 Request:
 {st.session_state["last_request_path"]}

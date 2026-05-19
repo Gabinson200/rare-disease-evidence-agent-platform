@@ -1,0 +1,16 @@
+﻿{
+  agents: {
+    defaults: {
+      contextPruning: {
+        mode: "cache-ttl",
+        ttl: "2m"
+      },
+      contextLimits: {
+        toolResultMaxChars: 6000,
+        postCompactionMaxChars: 8000,
+        memoryGetMaxChars: 4000,
+        memoryGetDefaultLines: 60
+      }
+    }
+  }
+}

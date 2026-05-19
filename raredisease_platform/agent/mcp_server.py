@@ -27,6 +27,7 @@ BROKER_BASE_URL = "http://127.0.0.1:8000"
 LOG_PATH = REPO_ROOT / "mcp_runtime.log"
 JOBS_DIR = REPO_ROOT / "mcp_jobs"
 UI_RUNS_DIR = REPO_ROOT / "ui_runs"
+BATCH_NOTES_DIR = UI_RUNS_DIR / "batch_notes"
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +63,7 @@ def configure_logging() -> logging.Logger:
     logger.info("LOG_PATH=%s", LOG_PATH)
     logger.info("JOBS_DIR=%s", JOBS_DIR)
     logger.info("UI_RUNS_DIR=%s", UI_RUNS_DIR)
+    logger.info("BATCH_NOTES_DIR=%s", BATCH_NOTES_DIR)
     logger.info("BROKER_BASE_URL=%s", BROKER_BASE_URL)
     logger.info("python=%s", sys.executable)
     logger.info("argv=%s", sys.argv)
@@ -72,6 +74,7 @@ def configure_logging() -> logging.Logger:
 logger = configure_logging()
 JOBS_DIR.mkdir(exist_ok=True)
 UI_RUNS_DIR.mkdir(exist_ok=True)
+BATCH_NOTES_DIR.mkdir(exist_ok=True)
 
 mcp = FastMCP("rare-disease-evidence")
 JOBS: Dict[str, Dict[str, Any]] = {}
@@ -201,6 +204,83 @@ def _safe_ui_run_path(path_or_name: str) -> Path:
         raise ValueError("Resolved path is outside ui_runs.")
 
     return path
+
+
+# ---------------------------------------------------------------------------
+# Saved batch-note helpers
+# ---------------------------------------------------------------------------
+
+def _ui_payload_stem(path: Path) -> str:
+    """Return a stable run stem for ui_runs files."""
+    name = path.name
+    for suffix in (".agent.json", ".abstract_pack.json", ".batch_plan.json", ".full.json", ".request.json"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return path.stem
+
+
+def _batch_notes_path_for_payload(path: Path) -> Path:
+    """Return the batch-note file path for a saved UI payload."""
+    return BATCH_NOTES_DIR / f"{_ui_payload_stem(path)}.batch_notes.json"
+
+
+def _new_batch_notes_payload(
+    *,
+    source_payload: Path,
+    research_question: str = "",
+    synthesis_mode: str = "",
+) -> Dict[str, Any]:
+    return {
+        "schema": "rare_disease_batch_notes_v1",
+        "source_agent_payload": source_payload.name,
+        "research_question": research_question,
+        "synthesis_mode": synthesis_mode,
+        "created_at": _now(),
+        "updated_at": _now(),
+        "notes": [],
+    }
+
+
+def _load_batch_notes(
+    *,
+    notes_path: Path,
+    source_payload: Path,
+    research_question: str = "",
+    synthesis_mode: str = "",
+) -> Dict[str, Any]:
+    payload = _read_json_file(notes_path)
+    if payload is None:
+        payload = _new_batch_notes_payload(
+            source_payload=source_payload,
+            research_question=research_question,
+            synthesis_mode=synthesis_mode,
+        )
+
+    payload.setdefault("schema", "rare_disease_batch_notes_v1")
+    payload.setdefault("source_agent_payload", source_payload.name)
+    payload.setdefault("research_question", research_question)
+    payload.setdefault("synthesis_mode", synthesis_mode)
+    payload.setdefault("created_at", _now())
+    payload.setdefault("notes", [])
+
+    if research_question:
+        payload["research_question"] = research_question
+    if synthesis_mode:
+        payload["synthesis_mode"] = synthesis_mode
+
+    payload["updated_at"] = _now()
+    return payload
+
+
+def _sort_batch_notes(notes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return sorted(
+        notes,
+        key=lambda n: (
+            int(n.get("batch_number", 0) or 0),
+            int(n.get("offset", 0) or 0),
+        ),
+    )
+
 
 
 # ---------------------------------------------------------------------------
@@ -710,9 +790,272 @@ async def evidence_plan_agent_payload_batches_tool(
         "batches": batches,
         "usage": (
             "Call evidence_read_agent_payload once per batch using the returned offset "
-            "and max_results values. Then synthesize the batch summaries."
+            "and max_results values. For long reviews, save each batch note with "
+            "evidence_save_batch_note, then call evidence_read_batch_notes for final synthesis."
         ),
     }
+
+
+@mcp.tool(name="evidence_clear_batch_notes")
+async def evidence_clear_batch_notes_tool(
+    path_or_name: str,
+    research_question: str = "",
+    synthesis_mode: str = "",
+) -> Dict[str, Any]:
+    """Create or reset the saved batch-note file for a UI payload."""
+    try:
+        path = _safe_ui_run_path(path_or_name)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
+
+    if not path.exists():
+        return {
+            "ok": False,
+            "error_type": "FileNotFoundError",
+            "error": f"Could not find UI payload file: {path}",
+        }
+
+    notes_path = _batch_notes_path_for_payload(path)
+    payload = _new_batch_notes_payload(
+        source_payload=path,
+        research_question=research_question,
+        synthesis_mode=synthesis_mode,
+    )
+    _write_json_atomic(notes_path, payload)
+
+    logger.info("Cleared batch notes for %s -> %s", path.name, notes_path)
+
+    return {
+        "ok": True,
+        "source_agent_payload": path.name,
+        "notes_file": notes_path.name,
+        "notes_path": str(notes_path),
+        "note_count": 0,
+        "message": "Batch notes reset.",
+    }
+
+
+@mcp.tool(name="evidence_save_batch_note")
+async def evidence_save_batch_note_tool(
+    path_or_name: str,
+    batch_number: int,
+    offset: int,
+    max_results: int,
+    note: str,
+    research_question: str = "",
+    synthesis_mode: str = "",
+    replace_existing: bool = True,
+    max_note_chars: int = 3000,
+) -> Dict[str, Any]:
+    """
+    Save one compact batch note to disk.
+
+    Returns only metadata, not the note text, to avoid growing OpenClaw context.
+    """
+    try:
+        path = _safe_ui_run_path(path_or_name)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
+
+    if not path.exists():
+        return {
+            "ok": False,
+            "error_type": "FileNotFoundError",
+            "error": f"Could not find UI payload file: {path}",
+        }
+
+    batch_number = int(batch_number)
+    offset = int(offset)
+    max_results = int(max_results)
+    max_note_chars = max(300, min(int(max_note_chars), 8000))
+
+    clean_note = _clean_text(note, max_chars=max_note_chars)
+    first_paper_id = offset + 1
+    last_paper_id = offset + max_results
+
+    notes_path = _batch_notes_path_for_payload(path)
+    payload = _load_batch_notes(
+        notes_path=notes_path,
+        source_payload=path,
+        research_question=research_question,
+        synthesis_mode=synthesis_mode,
+    )
+
+    existing_notes = payload.get("notes") or []
+    if replace_existing:
+        existing_notes = [
+            n for n in existing_notes
+            if int(n.get("batch_number", -1) or -1) != batch_number
+        ]
+
+    note_record = {
+        "batch_number": batch_number,
+        "offset": offset,
+        "max_results": max_results,
+        "paper_id_range": f"P{first_paper_id}-P{last_paper_id}",
+        "note": clean_note,
+        "note_chars": len(clean_note),
+        "saved_at": _now(),
+    }
+
+    existing_notes.append(note_record)
+    payload["notes"] = _sort_batch_notes(existing_notes)
+    payload["updated_at"] = _now()
+
+    if research_question:
+        payload["research_question"] = research_question
+    if synthesis_mode:
+        payload["synthesis_mode"] = synthesis_mode
+
+    _write_json_atomic(notes_path, payload)
+
+    logger.info(
+        "Saved batch note source=%s batch=%s range=P%s-P%s chars=%s",
+        path.name,
+        batch_number,
+        first_paper_id,
+        last_paper_id,
+        len(clean_note),
+    )
+
+    return {
+        "ok": True,
+        "source_agent_payload": path.name,
+        "notes_file": notes_path.name,
+        "notes_path": str(notes_path),
+        "batch_number": batch_number,
+        "paper_id_range": f"P{first_paper_id}-P{last_paper_id}",
+        "saved_note_chars": len(clean_note),
+        "total_saved_notes": len(payload["notes"]),
+        "message": "Batch note saved. Do not repeat the note text in chat.",
+    }
+
+
+@mcp.tool(name="evidence_batch_notes_status")
+async def evidence_batch_notes_status_tool(path_or_name: str) -> Dict[str, Any]:
+    """Return saved batch-note progress without returning the note text."""
+    try:
+        path = _safe_ui_run_path(path_or_name)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
+
+    notes_path = _batch_notes_path_for_payload(path)
+    payload = _read_json_file(notes_path)
+
+    if payload is None:
+        return {
+            "ok": True,
+            "source_agent_payload": path.name,
+            "notes_file": notes_path.name,
+            "notes_path": str(notes_path),
+            "exists": False,
+            "note_count": 0,
+            "batches": [],
+        }
+
+    notes = _sort_batch_notes(payload.get("notes") or [])
+
+    return {
+        "ok": True,
+        "source_agent_payload": path.name,
+        "notes_file": notes_path.name,
+        "notes_path": str(notes_path),
+        "exists": True,
+        "note_count": len(notes),
+        "research_question": payload.get("research_question"),
+        "synthesis_mode": payload.get("synthesis_mode"),
+        "batches": [
+            {
+                "batch_number": n.get("batch_number"),
+                "paper_id_range": n.get("paper_id_range"),
+                "offset": n.get("offset"),
+                "max_results": n.get("max_results"),
+                "note_chars": n.get("note_chars"),
+            }
+            for n in notes
+        ],
+    }
+
+
+@mcp.tool(name="evidence_read_batch_notes")
+async def evidence_read_batch_notes_tool(
+    path_or_name: str,
+    max_note_chars: int = 1200,
+    max_notes: int = 1000,
+) -> Dict[str, Any]:
+    """
+    Read compact saved batch notes for final synthesis.
+
+    This should be called after all batch notes have been saved.
+    """
+    try:
+        path = _safe_ui_run_path(path_or_name)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
+
+    notes_path = _batch_notes_path_for_payload(path)
+    payload = _read_json_file(notes_path)
+
+    if payload is None:
+        return {
+            "ok": False,
+            "source_agent_payload": path.name,
+            "notes_file": notes_path.name,
+            "notes_path": str(notes_path),
+            "error_type": "FileNotFoundError",
+            "error": f"No batch notes found for {path.name}. Call evidence_save_batch_note first.",
+        }
+
+    max_note_chars = max(200, min(int(max_note_chars), 5000))
+    max_notes = max(1, min(int(max_notes), 1000))
+
+    raw_notes = _sort_batch_notes(payload.get("notes") or [])[:max_notes]
+    notes: List[Dict[str, Any]] = []
+
+    for n in raw_notes:
+        notes.append(
+            _remove_empty(
+                {
+                    "batch_number": n.get("batch_number"),
+                    "paper_id_range": n.get("paper_id_range"),
+                    "offset": n.get("offset"),
+                    "max_results": n.get("max_results"),
+                    "note": _clean_text(n.get("note"), max_chars=max_note_chars),
+                }
+            )
+        )
+
+    return {
+        "ok": True,
+        "source_agent_payload": path.name,
+        "notes_file": notes_path.name,
+        "notes_path": str(notes_path),
+        "research_question": payload.get("research_question"),
+        "synthesis_mode": payload.get("synthesis_mode"),
+        "note_count": len(notes),
+        "notes": notes,
+        "usage": (
+            "Use these compact notes for final synthesis. Do not ask for raw abstracts "
+            "unless the user explicitly requests verification."
+        ),
+    }
+
 
 
 @mcp.tool(name="evidence_list_ui_payloads")
