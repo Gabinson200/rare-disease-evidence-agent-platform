@@ -287,6 +287,88 @@ def make_batch_plan(*, available_papers: int, papers_to_process: int, batch_size
 # OpenClaw prompt generators
 # ---------------------------------------------------------------------------
 
+TASK_PROFILES: Dict[str, Dict[str, str]] = {
+    "General literature synthesis": {
+        "batch": (
+            "Identify the main claim(s), study type(s), population/model/system, key findings, "
+            "limitations, disagreements, and citation-worthy papers. Group evidence into themes when useful."
+        ),
+        "final": (
+            "Give a direct answer to the research question, then synthesize the strongest themes, "
+            "study types, agreement/disagreement, limitations, and practical interpretation."
+        ),
+    },
+    "Count / prevalence / estimate question": {
+        "batch": (
+            "Look specifically for direct counts, prevalence estimates, database/catalog sizes, cohort sizes, "
+            "denominators, lower bounds, and papers that explicitly say a count is unknown or evolving. "
+            "Separate direct quantitative evidence from individual examples and reviews."
+        ),
+        "final": (
+            "Give a precise number only if the evidence supports one. Otherwise distinguish historical catalog "
+            "counts, lower bounds, estimates, and evidence gaps. Explain why a current exact count is or is not supported."
+        ),
+    },
+    "Entity-specific evidence review": {
+        "batch": (
+            "Track evidence involving the target disease/gene/variant/phenotype/drug, including direct matches, "
+            "case reports, cohorts, mechanisms, conflicting findings, and citation-worthy papers."
+        ),
+        "final": (
+            "Summarize the evidence for the target entity or entity relationship. Separate direct evidence, "
+            "supportive/indirect evidence, contradictions, and limitations."
+        ),
+    },
+    "Case report / phenotype extraction": {
+        "batch": (
+            "Identify case reports, patient/family counts, phenotypes, variants/genes, inheritance pattern, "
+            "diagnostic evidence, treatment/outcome details, and recurring clinical themes."
+        ),
+        "final": (
+            "Synthesize the case-level evidence, recurring phenotypes, genes/variants, inheritance patterns, "
+            "and limitations of the case literature."
+        ),
+    },
+    "Mechanism / genetics synthesis": {
+        "batch": (
+            "Identify proposed mechanisms, gene-gene interactions, pathways, model systems, variant effects, "
+            "experimental evidence, and whether claims are demonstrated or speculative."
+        ),
+        "final": (
+            "Explain the mechanistic/genetic picture, strongest supporting evidence, uncertain mechanisms, "
+            "and how the papers connect."
+        ),
+    },
+    "Clinical trials / treatment synthesis": {
+        "batch": (
+            "Identify interventions, trial or study design, population, outcomes, safety signals, endpoints, "
+            "and whether evidence is clinical, preclinical, observational, or anecdotal."
+        ),
+        "final": (
+            "Summarize treatment/trial evidence by intervention, evidence strength, outcomes, safety, "
+            "and limitations."
+        ),
+    },
+    "Custom": {
+        "batch": "Use the custom synthesis instructions provided by the user.",
+        "final": "Use the custom synthesis instructions provided by the user.",
+    },
+}
+
+
+def get_profile_instructions(task_profile: str, custom_focus: str = "") -> Dict[str, str]:
+    base = TASK_PROFILES.get(task_profile, TASK_PROFILES["General literature synthesis"])
+
+    if task_profile == "Custom" and custom_focus.strip():
+        custom = clean_text(custom_focus)
+        return {
+            "batch": custom,
+            "final": custom,
+        }
+
+    return base
+
+
 def make_single_pass_mcp_prompt(
     *,
     agent_payload_path: str,
@@ -294,8 +376,11 @@ def make_single_pass_mcp_prompt(
     word_limit: int,
     max_results: int,
     max_abstract_chars: int,
+    task_profile: str,
+    custom_focus: str = "",
 ) -> str:
     filename = Path(agent_payload_path).name
+    profile = get_profile_instructions(task_profile, custom_focus)
 
     return f"""Use the rare-disease-evidence MCP tool evidence_read_agent_payload with path_or_name="{filename}", offset=0, max_results={max_results}, max_abstract_chars={max_abstract_chars}, include_trace_warnings=true.
 
@@ -303,7 +388,13 @@ Using only the returned abstract_pack, answer this research question:
 
 {task}
 
-Write a cautious answer in under {word_limit} words. Cite sources using paper IDs like [P1], [P2]. Do not request or print the full JSON.
+Synthesis mode:
+{task_profile}
+
+What to look for:
+{profile["final"]}
+
+Write a cautious answer in under {word_limit} words. Cite sources using paper IDs like [P1], [P2]. Do not request or print the full JSON or complete abstracts.
 """
 
 
@@ -316,40 +407,64 @@ def make_batch_prompt(
     max_results: int,
     max_abstract_chars: int,
     batch_word_limit: int,
+    task_profile: str,
+    custom_focus: str = "",
 ) -> str:
     filename = Path(agent_payload_path).name
     start_pid = offset + 1
     end_pid = offset + max_results
+    profile = get_profile_instructions(task_profile, custom_focus)
 
     return f"""Use the rare-disease-evidence MCP tool evidence_read_agent_payload with path_or_name="{filename}", offset={offset}, max_results={max_results}, max_abstract_chars={max_abstract_chars}, include_trace_warnings=true.
 
 This is batch {batch_number}, covering papers P{start_pid}-P{end_pid}.
 
-Using only the returned abstract_pack, write a batch summary for this research question:
+Using only the returned abstract_pack, write a batch note for this research question:
 
 {task}
 
+Synthesis mode:
+{task_profile}
+
+Batch extraction instructions:
+{profile["batch"]}
+
 In under {batch_word_limit} words:
-- State whether any paper in this batch gives a direct count, catalog size, database count, or estimate.
-- Separate direct counting/catalog evidence from individual case examples and conceptual/review papers.
-- Cite relevant paper IDs like [P{start_pid}], [P{start_pid + 1}].
+- Extract only evidence relevant to the research question and synthesis mode.
+- Identify direct evidence separately from indirect, background, review, modeling, or case/example evidence.
+- Note contradictions, uncertainty, missing denominators, and limitations when relevant.
+- Cite useful paper IDs like [P{start_pid}], [P{min(start_pid + 1, end_pid)}].
 - Do not answer the final question yet; only summarize this batch.
-- Do not request or print the full JSON.
+- Do not request or print the full JSON or complete abstracts.
 """
 
 
-def make_final_synthesis_prompt(*, task: str, word_limit: int) -> str:
-    return f"""Using the batch summaries above, answer the final research question:
+def make_final_synthesis_prompt(
+    *,
+    task: str,
+    word_limit: int,
+    task_profile: str,
+    custom_focus: str = "",
+) -> str:
+    profile = get_profile_instructions(task_profile, custom_focus)
+
+    return f"""Using the batch notes above, answer the final research question:
 
 {task}
+
+Synthesis mode:
+{task_profile}
+
+Final synthesis instructions:
+{profile["final"]}
 
 Write a cautious synthesis in under {word_limit} words.
 
 Required structure:
-1. Direct answer: give a precise number only if the batch summaries support one.
-2. Evidence basis: distinguish database/catalog/counting papers from case reports and conceptual/review papers.
-3. Uncertainty: explain whether the evidence supports a fixed count, a lower bound, or no reliable count.
-4. Citations: cite the most relevant local paper IDs mentioned in the batch summaries, such as [P1], [P22].
+1. Direct answer.
+2. Evidence basis: distinguish direct evidence from indirect/example/review/modeling evidence.
+3. Uncertainty and limitations.
+4. Citations: cite the most relevant local paper IDs mentioned in the batch notes, such as [P1], [P22].
 
 Do not ask for the full JSON.
 """
@@ -364,9 +479,12 @@ def make_recursive_batch_prompt(
     max_abstract_chars: int,
     batch_word_limit: int,
     final_word_limit: int,
+    task_profile: str,
+    custom_focus: str = "",
 ) -> str:
     """One prompt that asks OpenClaw to orchestrate all batch tool calls itself."""
     filename = Path(agent_payload_path).name
+    profile = get_profile_instructions(task_profile, custom_focus)
 
     return f"""You are an evidence-synthesis agent with access to the rare-disease-evidence MCP tools.
 
@@ -374,6 +492,15 @@ Goal: answer the research question below by processing the saved evidence payloa
 
 Research question:
 {task}
+
+Synthesis mode:
+{task_profile}
+
+Evidence extraction instructions:
+{profile["batch"]}
+
+Final synthesis instructions:
+{profile["final"]}
 
 Use this workflow exactly:
 
@@ -390,18 +517,18 @@ Use this workflow exactly:
    - max_abstract_chars={max_abstract_chars}
    - include_trace_warnings=true
 
-3. For each batch, make a short working batch note under {batch_word_limit} words. Each batch note should identify:
-   - any paper that gives a direct count, database/catalog size, cohort count, or estimate;
-   - papers that are only individual examples/case reports;
-   - conceptual/review/modeling papers;
-   - relevant citations using paper IDs like [P1], [P22].
+3. For each batch, make a short working batch note under {batch_word_limit} words. Each batch note should:
+   - extract only evidence relevant to the research question and synthesis mode;
+   - separate direct evidence from indirect/example/review/modeling evidence;
+   - note contradictions, uncertainty, missing denominators, and limitations when relevant;
+   - cite relevant paper IDs like [P1], [P22].
 
 4. After all batches have been read, write the final answer in under {final_word_limit} words.
 
 Final answer requirements:
-- Give a precise number only if the batch evidence supports one.
-- If no precise count is supported, say that clearly and explain why.
-- Distinguish catalog/counting evidence from individual disease examples and conceptual/review papers.
+- Answer the specific research question directly.
+- Give precise numbers, clinical claims, or causal claims only if the batch evidence supports them.
+- If the evidence does not support a definitive answer, say that clearly and explain why.
 - Cite the most relevant paper IDs from across the batches.
 - Do not print raw JSON or complete abstracts.
 - Do not call response_profile=full.
@@ -413,12 +540,18 @@ def make_inline_prompt(
     abstract_pack: Dict[str, Any],
     task: str,
     word_limit: int,
+    task_profile: str,
+    custom_focus: str = "",
 ) -> str:
     payload_text = json.dumps(abstract_pack, indent=2, ensure_ascii=False, default=str)
+    profile = get_profile_instructions(task_profile, custom_focus)
 
     return f"""Answer this research question:
 
 {task}
+
+Synthesis mode:
+{task_profile}
 
 Use only the compact abstract_pack below. Do not ask to read a file. Do not request the full JSON.
 
@@ -426,11 +559,15 @@ Use only the compact abstract_pack below. Do not ask to read a file. Do not requ
 {payload_text}
 ```
 
+Synthesis instructions:
+{profile["final"]}
+
 Write a cautious answer in under {word_limit} words. Cite sources using paper IDs like [P1], [P2].
 """
 
 
 # ---------------------------------------------------------------------------
+
 # Streamlit UI
 # ---------------------------------------------------------------------------
 
@@ -461,26 +598,29 @@ with st.sidebar:
     retmax = st.slider(
         "Raw literature retmax",
         min_value=1,
-        max_value=500,
-        value=150,
-        step=1,
+        max_value=1000,
+        value=250,
+        step=10,
         help=(
             "Maximum number of raw literature records requested from the backend. "
-            "Higher values retrieve more evidence but take longer and create larger full-result files."
+            "Use 100–300 for normal reviews, 300–700 for broad literature maps, "
+            "and up to 1000 for stress tests."
         ),
     )
+    st.caption("Range: 1–1000 raw records. This controls retrieval, not how many papers OpenClaw reads.")
 
     max_results_for_agent = st.slider(
         "Papers saved for OpenClaw",
         min_value=1,
-        max_value=200,
-        value=80,
-        step=1,
+        max_value=1000,
+        value=250,
+        step=10,
         help=(
             "Number of top literature results saved in the .agent.json file. "
-            "Batch prompts can page through this set with offset/max_results."
+            "To let OpenClaw review all retrieved abstracts, set this at least as high as Raw literature retmax."
         ),
     )
+    st.caption("Range: 1–1000 saved papers. If this is lower than raw retmax, OpenClaw cannot see the unsaved papers.")
 
     max_abstract_chars = st.slider(
         "Max abstract chars per paper",
@@ -488,13 +628,17 @@ with st.sidebar:
         max_value=3000,
         value=700,
         step=100,
-        help="Maximum abstract characters saved per paper. Lower values reduce token cost.",
+        help=(
+            "Maximum abstract characters saved per paper. 400–700 is usually enough for batch synthesis; "
+            "1000–2000 is more thorough but more expensive."
+        ),
     )
+    st.caption("Range: 100–3000 chars per paper. This is the main token-cost knob.")
 
     timeout_seconds = st.slider(
         "Backend timeout seconds",
         min_value=30,
-        max_value=600,
+        max_value=900,
         value=300,
         step=30,
         help="Maximum time to wait for the backend query to complete.",
@@ -586,56 +730,67 @@ with st.sidebar:
     single_pass_results = st.slider(
         "Single-pass papers",
         min_value=1,
-        max_value=50,
+        max_value=100,
         value=20,
         step=1,
-        help="Number of papers to use in the single-call prompt.",
+        help="Number of papers to use in the quick single-call prompt.",
     )
+    st.caption("Range: 1–100 papers. Use this only for quick summaries, not thorough reviews.")
 
     papers_to_batch = st.slider(
         "Papers to process in batches",
         min_value=1,
-        max_value=200,
-        value=80,
-        step=1,
-        help="Total number of saved papers to cover with batch prompts.",
+        max_value=1000,
+        value=250,
+        step=10,
+        help=(
+            "Total number of saved papers OpenClaw should cover through batch MCP calls. "
+            "For all retrieved papers, set this equal to Papers saved for OpenClaw."
+        ),
     )
+    st.caption("Range: 1–1000 papers. This is how many saved papers the recursive prompt will ask OpenClaw to read.")
 
     batch_size = st.slider(
         "Batch size",
         min_value=5,
         max_value=50,
-        value=20,
+        value=25,
         step=5,
-        help="Number of papers per OpenClaw batch prompt.",
+        help=(
+            "Number of papers per OpenClaw batch. 20–30 is a good default; 50 is faster but heavier."
+        ),
     )
+    st.caption("Range: 5–50 papers per MCP call. Keep this at or below 50 because the MCP reader caps large batches.")
 
     batch_word_limit = st.slider(
-        "Batch summary word limit",
-        min_value=100,
+        "Batch note word limit",
+        min_value=75,
         max_value=1000,
-        value=350,
-        step=50,
-        help="Word limit for each batch summary.",
+        value=250,
+        step=25,
+        help=(
+            "Maximum size of each internal batch note. Smaller notes make long runs more reliable."
+        ),
     )
 
     final_word_limit = st.slider(
         "Final synthesis word limit",
         min_value=200,
-        max_value=2000,
-        value=900,
+        max_value=3000,
+        value=1200,
         step=100,
-        help="Word limit for the final synthesis after batch summaries.",
+        help="Word limit for the final synthesis after batch notes.",
     )
 
     single_pass_word_limit = st.slider(
         "Single-pass summary word limit",
         min_value=100,
-        max_value=1500,
+        max_value=2000,
         value=700,
         step=50,
         help="Word limit for the single-call prompt.",
     )
+
 
 
 query = st.text_area(
@@ -655,6 +810,36 @@ literature_keywords = st.text_input(
         "Extra literature-search keywords. Useful for broad review-style questions. "
         "For entity-specific searches, this can be something like 'case report' or 'review'."
     ),
+)
+
+st.subheader("Synthesis mode")
+
+task_profile = st.selectbox(
+    "What kind of answer should OpenClaw synthesize?",
+    list(TASK_PROFILES.keys()),
+    index=0,
+    help=(
+        "This changes the generated OpenClaw prompts. Use 'Count / prevalence / estimate question' "
+        "for questions like 'how many?', 'how common?', or 'what is the prevalence?'. Use 'Entity-specific "
+        "evidence review' for disease/gene/variant-specific questions."
+    ),
+)
+
+custom_focus = ""
+if task_profile == "Custom":
+    custom_focus = st.text_area(
+        "Custom synthesis instructions",
+        value="",
+        height=120,
+        placeholder=(
+            "Example: Extract all papers that mention ACVR1 and BMP signaling, group by mechanism, "
+            "and cite the strongest evidence."
+        ),
+    )
+
+st.caption(
+    "Prompt behavior is now generic: the same batch workflow can handle broad reviews, count/prevalence questions, "
+    "entity-specific evidence reviews, case report extraction, mechanism synthesis, or treatment/trial summaries."
 )
 
 st.subheader("Entity interpretation")
@@ -715,14 +900,15 @@ with st.expander("Recommended settings by query type"):
         """
         **Broad literature review / counting question**
 
-        Example: *How many digenic rare diseases are there?*
+        Examples: *How many digenic rare diseases are there?*, *What is known about oligogenic inheritance in rare disease?*
 
         Recommended:
         - Leave **Expected entity types** empty.
+        - Choose **Synthesis mode**: `General literature synthesis` or `Count / prevalence / estimate question`.
         - Keep **Include structured evidence** disabled.
-        - Use **Raw literature retmax** around 100–300.
-        - Save 50–150 papers for OpenClaw.
-        - Use batch prompts of 10–25 papers.
+        - Use **Raw literature retmax** around 250–700.
+        - Save the same number of papers for OpenClaw if you want the agent to review everything.
+        - Use batch prompts of 20–30 papers.
 
         **Entity-specific literature question**
 
@@ -730,6 +916,7 @@ with st.expander("Recommended settings by query type"):
 
         Recommended:
         - Set **Expected entity types** to `disease` and `gene`.
+        - Choose **Synthesis mode**: `Entity-specific evidence review` or `Case report / phenotype extraction`.
         - Use `case report` as literature keywords.
         - Enable **Case reports only** if appropriate.
 
@@ -869,6 +1056,8 @@ if run_button:
         st.session_state["last_batch_word_limit"] = batch_word_limit
         st.session_state["last_final_word_limit"] = final_word_limit
         st.session_state["last_single_pass_word_limit"] = single_pass_word_limit
+        st.session_state["last_task_profile"] = task_profile
+        st.session_state["last_custom_focus"] = custom_focus
 
         st.success(f"Backend query completed in {elapsed:.2f} seconds.")
 
@@ -899,6 +1088,13 @@ if "last_agent_payload" in st.session_state:
         "Batch prompts are recommended for thorough synthesis over many papers."
     )
 
+    if len(literature_results) > available_papers:
+        st.warning(
+            f"The backend retrieved {len(literature_results)} raw literature results, but only {available_papers} "
+            "papers were saved for OpenClaw. To let OpenClaw review more of the retrieved abstracts, increase "
+            "'Papers saved for OpenClaw' and rerun the backend search."
+        )
+
     st.subheader("Preview: first single-pass abstract pack")
 
     for paper in abstract_pack.get("papers") or []:
@@ -916,12 +1112,25 @@ if "last_agent_payload" in st.session_state:
 
     st.subheader("Generated OpenClaw prompts")
 
+    # Be robust to old Streamlit session state from a previous UI version.
+    # These values must be defined before any prompt generator uses them.
+    task_profile_value = st.session_state.get(
+        "last_task_profile",
+        globals().get("task_profile", "General literature synthesis"),
+    )
+    custom_focus_value = st.session_state.get("last_custom_focus", "")
+    max_abstract_chars_value = int(
+        st.session_state.get("last_max_abstract_chars", globals().get("max_abstract_chars", 700))
+    )
+
     single_prompt = make_single_pass_mcp_prompt(
         agent_payload_path=st.session_state["last_agent_path"],
         task=query,
         word_limit=int(st.session_state.get("last_single_pass_word_limit", 500)),
-        max_results=st.session_state["last_single_pass_results"],
-        max_abstract_chars=st.session_state["last_max_abstract_chars"],
+        max_results=int(st.session_state.get("last_single_pass_results", 20)),
+        max_abstract_chars=max_abstract_chars_value,
+        task_profile=task_profile_value,
+        custom_focus=custom_focus_value,
     )
 
     st.text_area(
@@ -945,8 +1154,6 @@ if "last_agent_payload" in st.session_state:
     batch_size_value = int(st.session_state.get("last_batch_size", fallback_batch_size))
     batch_word_limit_value = int(st.session_state.get("last_batch_word_limit", 350))
     final_word_limit_value = int(st.session_state.get("last_final_word_limit", globals().get("final_word_limit", 900)))
-    max_abstract_chars_value = int(st.session_state.get("last_max_abstract_chars", max_abstract_chars))
-
     recursive_prompt = make_recursive_batch_prompt(
         agent_payload_path=st.session_state["last_agent_path"],
         task=query,
@@ -955,6 +1162,8 @@ if "last_agent_payload" in st.session_state:
         max_abstract_chars=max_abstract_chars_value,
         batch_word_limit=batch_word_limit_value,
         final_word_limit=final_word_limit_value,
+        task_profile=task_profile_value,
+        custom_focus=custom_focus_value,
     )
 
     st.text_area(
@@ -987,6 +1196,8 @@ if "last_agent_payload" in st.session_state:
                 max_results=batch["max_results"],
                 max_abstract_chars=max_abstract_chars_value,
                 batch_word_limit=batch_word_limit_value,
+                task_profile=task_profile_value,
+                custom_focus=custom_focus_value,
             )
             batch_prompts.append(prompt)
 
@@ -1000,6 +1211,8 @@ if "last_agent_payload" in st.session_state:
         final_prompt = make_final_synthesis_prompt(
             task=query,
             word_limit=final_word_limit_value,
+            task_profile=task_profile_value,
+            custom_focus=custom_focus_value,
         )
         st.text_area("Final synthesis prompt", value=final_prompt, height=220)
 
@@ -1008,6 +1221,8 @@ if "last_agent_payload" in st.session_state:
             abstract_pack=abstract_pack,
             task=query,
             word_limit=int(st.session_state.get("last_single_pass_word_limit", 500)),
+            task_profile=task_profile_value,
+            custom_focus=custom_focus_value,
         )
         st.text_area(
             "Inline OpenClaw prompt",
